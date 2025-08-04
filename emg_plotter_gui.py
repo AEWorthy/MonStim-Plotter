@@ -17,10 +17,10 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QFormLayout, QGroupBox, QPushButton, QLabel, QLineEdit, QFileDialog, 
     QComboBox, QSpinBox, QDoubleSpinBox, QCheckBox, QTextEdit, QMessageBox,
-    QProgressBar, QTabWidget, QFrame
+    QProgressBar, QTabWidget, QFrame, QColorDialog
 )
-from PyQt6.QtCore import QThread, pyqtSignal
-from PyQt6.QtGui import QFont, QIcon
+from PyQt6.QtCore import QThread, pyqtSignal, Qt
+from PyQt6.QtGui import QFont, QIcon, QColor
 
 # Import the plotting functions from our existing script
 from plot_emg import plot_emg_trace
@@ -60,7 +60,14 @@ class FileSelectionWidget(QGroupBox):
     def __init__(self):
         super().__init__("File Selection")
         self.csv_file = None
+        self.available_recordings = []
+        self.available_channels = []
+        self.file_info_callback = None  # Callback for when file info is updated
         self.setup_ui()
+        
+    def set_file_info_callback(self, callback):
+        """Set callback function to be called when file info is updated"""
+        self.file_info_callback = callback
         
     def setup_ui(self):
         layout = QVBoxLayout()
@@ -68,7 +75,7 @@ class FileSelectionWidget(QGroupBox):
         # File selection row
         file_row = QHBoxLayout()
         self.file_label = QLabel("No file selected")
-        self.file_label.setStyleSheet("QLabel { color: #666; font-style: italic; }")
+        self.file_label.setStyleSheet("QLabel { color: palette(disabled-text); font-style: italic; }")
         self.browse_button = QPushButton("Browse CSV File...")
         self.browse_button.clicked.connect(self.browse_file)
         
@@ -80,7 +87,8 @@ class FileSelectionWidget(QGroupBox):
         self.info_text = QTextEdit()
         self.info_text.setMaximumHeight(100)
         self.info_text.setReadOnly(True)
-        self.info_text.setStyleSheet("QTextEdit { background-color: #f8f8f8; color: #000; }")
+        # Use system colors for better dark mode compatibility
+        self.info_text.setStyleSheet("QTextEdit { background-color: palette(base); }")
         # Add some default text to test if the widget is working
         self.info_text.setText("File info will appear here when you select a CSV file...")
         layout.addWidget(self.info_text)
@@ -100,7 +108,8 @@ class FileSelectionWidget(QGroupBox):
             self.csv_file = file_path
             filename = os.path.basename(file_path)
             self.file_label.setText(filename)
-            self.file_label.setStyleSheet("QLabel { color: #000; font-weight: bold; }")
+            # Use system colors that adapt to dark/light themes
+            self.file_label.setStyleSheet("QLabel { font-weight: bold; }")
             self.load_file_info()
     
     def load_file_info(self):
@@ -111,6 +120,17 @@ class FileSelectionWidget(QGroupBox):
         try:
             # Read just the first few rows to get info
             df = pd.read_csv(self.csv_file, nrows=1000)
+            
+            # Store available recordings and channels
+            if 'recording_index' in df.columns:
+                self.available_recordings = sorted(df['recording_index'].unique())
+            else:
+                self.available_recordings = []
+                
+            if 'channel_index' in df.columns:
+                self.available_channels = sorted(df['channel_index'].unique())
+            else:
+                self.available_channels = []
             
             info_text = f"File: {os.path.basename(self.csv_file)}\n"
             info_text += f"Columns: {', '.join(df.columns.tolist())}\n"
@@ -136,9 +156,15 @@ class FileSelectionWidget(QGroupBox):
             self.info_text.setText(info_text)
             self.info_text.update()
             
+            # Call callback if set
+            if self.file_info_callback:
+                self.file_info_callback(self.available_recordings, self.available_channels)
+            
         except Exception as e:
             error_msg = f"Error reading file: {str(e)}"
             self.info_text.setText(error_msg)
+            self.available_recordings = []
+            self.available_channels = []
 
 
 class PlotOptionsWidget(QGroupBox):
@@ -149,7 +175,6 @@ class PlotOptionsWidget(QGroupBox):
         self.setup_ui()
     
     def setup_ui(self):
-        # TODO: Add tooltips to all options
         layout = QVBoxLayout()
         
         # Create tabs for different option groups
@@ -159,26 +184,45 @@ class PlotOptionsWidget(QGroupBox):
         basic_tab = QWidget()
         basic_layout = QFormLayout()
         
-        # TODO: Make a recording and channel index selectors instead of spinboxes, and only enable selection of valid recordings and channels
-        self.recording_spin = QSpinBox()
-        self.recording_spin.setMinimum(0)
-        self.recording_spin.setMaximum(9999)
-        self.recording_spin.setValue(0)
-        basic_layout.addRow("Recording Index:", self.recording_spin)
+        # Recording and channel selectors (will be populated when file is loaded)
+        self.recording_combo = QComboBox()
+        self.recording_combo.setToolTip("Select which recording index to plot from the CSV file")
+        basic_layout.addRow("Recording Index:", self.recording_combo)
         
-        self.channel_spin = QSpinBox()
-        self.channel_spin.setMinimum(0)
-        self.channel_spin.setMaximum(10)
-        self.channel_spin.setValue(1)
-        basic_layout.addRow("Channel Index:", self.channel_spin)
+        self.channel_combo = QComboBox()
+        self.channel_combo.setToolTip("Select which channel index to plot from the CSV file")
+        basic_layout.addRow("Channel Index:", self.channel_combo)
         
         self.overlay_check = QCheckBox()
         self.overlay_check.toggled.connect(self.on_overlay_toggled)
+        self.overlay_check.setToolTip("When enabled, overlays all recordings on the same plot with color coding")
         basic_layout.addRow("Overlay All Recordings:", self.overlay_check)
         
-        #TODO: make a color picker instead of QLineEdit
-        self.color_edit = QLineEdit("gold")
-        basic_layout.addRow("Single Trace Color:", self.color_edit)
+        # Color picker for single trace
+        color_row = QHBoxLayout()
+        self.color_edit = QLineEdit("#ffd700")
+        self.color_edit.setToolTip("Color name or hex code for single trace plots (e.g., 'gold', '#FFD700')")
+        
+        # Color swatch to show current color
+        self.color_swatch = QLabel()
+        self.color_swatch.setFixedSize(30, 23)  # Match height with line edit
+        self.color_swatch.setStyleSheet("QLabel { border: 1px solid gray; }")
+        self.color_swatch.setToolTip("Current selected color")
+        
+        self.color_button = QPushButton("Pick Color")
+        self.color_button.clicked.connect(self.pick_color)
+        self.color_button.setToolTip("Open color picker dialog")
+        
+        # Connect text changes to update swatch
+        self.color_edit.textChanged.connect(self.update_color_swatch)
+        
+        color_row.addWidget(self.color_edit, 1)
+        color_row.addWidget(self.color_swatch)
+        color_row.addWidget(self.color_button)
+        basic_layout.addRow("Single Trace Color:", color_row)
+        
+        # Initialize color swatch
+        self.update_color_swatch()
         
         basic_tab.setLayout(basic_layout)
         tab_widget.addTab(basic_tab, "Basic")
@@ -188,6 +232,7 @@ class PlotOptionsWidget(QGroupBox):
         overlay_layout = QFormLayout()
         
         self.stim_col_edit = QLineEdit("stimulus_V")
+        self.stim_col_edit.setToolTip("Name of the column containing stimulus values for color coding")
         overlay_layout.addRow("Stimulus Column:", self.stim_col_edit)
         
         self.cmap_combo = QComboBox()
@@ -195,6 +240,7 @@ class PlotOptionsWidget(QGroupBox):
             'viridis', 'plasma', 'inferno', 'magma', 'inferno_r',
             'cool', 'hot', 'spring', 'summer', 'autumn', 'winter'
         ])
+        self.cmap_combo.setToolTip("Colormap to use for color coding overlaid traces")
         overlay_layout.addRow("Colormap:", self.cmap_combo)
         
         self.cmin_spin = QDoubleSpinBox()
@@ -202,6 +248,7 @@ class PlotOptionsWidget(QGroupBox):
         self.cmin_spin.setMaximum(999.99)
         self.cmin_spin.setSpecialValueText("Auto")
         self.cmin_spin.setValue(-999.99)
+        self.cmin_spin.setToolTip("Minimum stimulus value for color scale (Auto = use data minimum)")
         overlay_layout.addRow("Color Min (V):", self.cmin_spin)
         
         self.cmax_spin = QDoubleSpinBox()
@@ -209,9 +256,12 @@ class PlotOptionsWidget(QGroupBox):
         self.cmax_spin.setMaximum(999.99)
         self.cmax_spin.setSpecialValueText("Auto")
         self.cmax_spin.setValue(-999.99)
+        self.cmax_spin.setToolTip("Maximum stimulus value for color scale (Auto = use data maximum)")
         overlay_layout.addRow("Color Max (V):", self.cmax_spin)
         
         self.colorbar_check = QCheckBox()
+        self.colorbar_check.setToolTip("Display a colorbar showing the stimulus-to-color mapping")
+        self.colorbar_check.setChecked(True)
         overlay_layout.addRow("Show Colorbar:", self.colorbar_check)
         
         overlay_tab.setLayout(overlay_layout)
@@ -226,32 +276,38 @@ class PlotOptionsWidget(QGroupBox):
         self.linewidth_spin.setMaximum(10.0)
         self.linewidth_spin.setSingleStep(0.1)
         self.linewidth_spin.setValue(1.5)
+        self.linewidth_spin.setToolTip("Width of the plotted trace lines")
         appearance_layout.addRow("Line Width:", self.linewidth_spin)
         
         self.figsize_width = QDoubleSpinBox()
         self.figsize_width.setMinimum(1.0)
         self.figsize_width.setMaximum(20.0)
-        self.figsize_width.setValue(10.0)
+        self.figsize_width.setValue(4.0)
+        self.figsize_width.setToolTip("Width of the output figure in inches")
         appearance_layout.addRow("Figure Width (inches):", self.figsize_width)
         
         self.figsize_height = QDoubleSpinBox()
         self.figsize_height.setMinimum(1.0)
         self.figsize_height.setMaximum(20.0)
-        self.figsize_height.setValue(4.0)
+        self.figsize_height.setValue(2.0)
+        self.figsize_height.setToolTip("Height of the output figure in inches")
         appearance_layout.addRow("Figure Height (inches):", self.figsize_height)
         
         self.dpi_spin = QSpinBox()
         self.dpi_spin.setMinimum(50)
         self.dpi_spin.setMaximum(600)
         self.dpi_spin.setValue(300)
+        self.dpi_spin.setToolTip("Resolution of the output figure (dots per inch)")
         appearance_layout.addRow("DPI:", self.dpi_spin)
         
         self.hide_axes_check = QCheckBox()
         self.hide_axes_check.setChecked(True)
-        appearance_layout.addRow("Hide Axes:", self.hide_axes_check)
+        self.hide_axes_check.setToolTip("Hide matplotlib plot axes, labels, and ticks for clean trace display")
+        appearance_layout.addRow("Hide Default Plot Axes:", self.hide_axes_check)
         
         self.transparent_check = QCheckBox()
         self.transparent_check.setChecked(True)
+        self.transparent_check.setToolTip("Use transparent background for the plot")
         appearance_layout.addRow("Transparent Background:", self.transparent_check)
         
         appearance_tab.setLayout(appearance_layout)
@@ -266,6 +322,7 @@ class PlotOptionsWidget(QGroupBox):
         self.tmin_spin.setMaximum(9999.99)
         self.tmin_spin.setSpecialValueText("Auto")
         self.tmin_spin.setValue(-9999.99)
+        self.tmin_spin.setToolTip("Minimum time value to display (Auto = use data minimum)")
         time_layout.addRow("Time Min (ms):", self.tmin_spin)
         
         self.tmax_spin = QDoubleSpinBox()
@@ -273,15 +330,23 @@ class PlotOptionsWidget(QGroupBox):
         self.tmax_spin.setMaximum(9999.99)
         self.tmax_spin.setSpecialValueText("Auto")
         self.tmax_spin.setValue(-9999.99)
+        self.tmax_spin.setToolTip("Maximum time value to display (Auto = use data maximum)")
         time_layout.addRow("Time Max (ms):", self.tmax_spin)
         
         self.fixed_y_check = QCheckBox()
         self.fixed_y_check.setChecked(False)
+        self.fixed_y_check.setToolTip("Use consistent Y-axis scaling across all plots for comparison")
         time_layout.addRow("Fixed Y-axis Scaling:", self.fixed_y_check)
         
         self.create_axes_check = QCheckBox()
-        self.create_axes_check.setChecked(True)
+        self.create_axes_check.setChecked(False)
+        self.create_axes_check.setToolTip("Creates a separate SVG file with clean scale bars that can be used in graphics applications")
         time_layout.addRow("Create Separate Axes SVG:", self.create_axes_check)
+        
+        self.plot_axes_on_trace_check = QCheckBox()
+        self.plot_axes_on_trace_check.setChecked(True)
+        self.plot_axes_on_trace_check.setToolTip("Adds scale bars directly to the trace plot itself (embedded in the main image)")
+        time_layout.addRow("Plot Scale Bars on Trace:", self.plot_axes_on_trace_check)
         
         time_tab.setLayout(time_layout)
         tab_widget.addTab(time_tab, "Time/Axes")
@@ -292,6 +357,86 @@ class PlotOptionsWidget(QGroupBox):
         # Set initial state
         self.on_overlay_toggled(False)
     
+    def pick_color(self):
+        """Open color picker dialog"""
+        # Get current color
+        current_color_text = self.color_edit.text().strip()
+        
+        # Try to parse current color
+        try:
+            if current_color_text.startswith('#'):
+                current_color = QColor(current_color_text)
+            else:
+                current_color = QColor(current_color_text)
+        except Exception:
+            current_color = QColor('#ffd700')  # Default fallback
+        
+        # Open color picker
+        color = QColorDialog.getColor(current_color, self, "Choose Trace Color")
+        
+        if color.isValid():
+            # Update the text field with hex color
+            self.color_edit.setText(color.name())
+    
+    def update_color_swatch(self, color_text=None):
+        """Update the color swatch to show the current color"""
+        if color_text is None:
+            color_text = self.color_edit.text().strip()
+        
+        # Try to parse the color
+        try:
+            if color_text.startswith('#'):
+                color = QColor(color_text)
+            else:
+                color = QColor(color_text)
+            
+            # If color is valid, update swatch
+            if color.isValid():
+                self.color_swatch.setStyleSheet(f"""
+                    QLabel {{ 
+                        background-color: {color.name()}; 
+                        border: 1px solid gray; 
+                    }}
+                """)
+            else:
+                # Invalid color - show a pattern or default
+                self.color_swatch.setStyleSheet("""
+                    QLabel { 
+                        background-color: white; 
+                        border: 1px solid red;
+                    }
+                """)
+        except Exception:
+            # Fallback for any parsing errors
+            self.color_swatch.setStyleSheet("""
+                QLabel { 
+                    background-color: white; 
+                    border: 1px solid red;
+                }
+            """)
+    
+    def update_recording_channel_options(self, available_recordings, available_channels):
+        """Update recording and channel combo boxes with available options"""
+        # Update recording combo box
+        self.recording_combo.clear()
+        if available_recordings:
+            for recording in available_recordings:
+                self.recording_combo.addItem(str(recording), recording)
+            self.recording_combo.setEnabled(True)
+        else:
+            self.recording_combo.addItem("No recordings found", 0)
+            self.recording_combo.setEnabled(False)
+        
+        # Update channel combo box
+        self.channel_combo.clear()
+        if available_channels:
+            for channel in available_channels:
+                self.channel_combo.addItem(str(channel), channel)
+            self.channel_combo.setEnabled(True)
+        else:
+            self.channel_combo.addItem("No channels found", 0)
+            self.channel_combo.setEnabled(False)
+    
     def on_overlay_toggled(self, checked):
         """Enable/disable overlay-specific options"""
         # Enable overlay tab when overlay is checked
@@ -301,9 +446,13 @@ class PlotOptionsWidget(QGroupBox):
     
     def get_plot_options(self):
         """Get all plot options as a dictionary"""
+        # Get values from combo boxes, fallback to 0 if no valid selection
+        recording_index = self.recording_combo.currentData() if self.recording_combo.currentData() is not None else 0
+        channel_index = self.channel_combo.currentData() if self.channel_combo.currentData() is not None else 0
+        
         return {
-            'recording_index': self.recording_spin.value(),
-            'channel_index': self.channel_spin.value(),
+            'recording_index': recording_index,
+            'channel_index': channel_index,
             'overlay': self.overlay_check.isChecked(),
             'stim_col': self.stim_col_edit.text(),
             'cmap_name': self.cmap_combo.currentText(),
@@ -319,7 +468,8 @@ class PlotOptionsWidget(QGroupBox):
             'hide_axes': self.hide_axes_check.isChecked(),
             'transparent': self.transparent_check.isChecked(),
             'fixed_y': self.fixed_y_check.isChecked(),
-            'create_axes': self.create_axes_check.isChecked()
+            'create_axes': self.create_axes_check.isChecked(),
+            'plot_axes_on_trace': self.plot_axes_on_trace_check.isChecked()
         }
 
 
@@ -336,11 +486,11 @@ class OutputWidget(QGroupBox):
         
         # Output file selection
         file_row = QHBoxLayout()
-        self.output_label = QLabel("No output file selected (will show plot)")
-        self.output_label.setStyleSheet("QLabel { color: #666; font-style: italic; }")
+        self.output_label = QLabel("No output file selected\n(Preview-only Mode)")
+        self.output_label.setStyleSheet("QLabel { color: palette(disabled-text); font-style: italic; }")
         self.browse_output_button = QPushButton("Choose Output File...")
         self.browse_output_button.clicked.connect(self.browse_output_file)
-        self.clear_output_button = QPushButton("Show Only")
+        self.clear_output_button = QPushButton("Clear")
         self.clear_output_button.clicked.connect(self.clear_output_file)
         
         file_row.addWidget(self.output_label, 1)
@@ -363,13 +513,13 @@ class OutputWidget(QGroupBox):
             self.output_file = file_path
             filename = os.path.basename(file_path)
             self.output_label.setText(f"Output: {filename}")
-            self.output_label.setStyleSheet("QLabel { color: #000; font-weight: bold; }")
+            self.output_label.setStyleSheet("QLabel { font-weight: bold; }")
     
     def clear_output_file(self):
         """Clear output file selection to show plot instead"""
         self.output_file = None
-        self.output_label.setText("No output file selected (will show plot)")
-        self.output_label.setStyleSheet("QLabel { color: #666; font-style: italic; }")
+        self.output_label.setText("No output file selected\n(Preview-only Mode)")
+        self.output_label.setStyleSheet("QLabel { color: palette(disabled-text); font-style: italic; }")
 
 
 class EMGPlotterMainWindow(QMainWindow):
@@ -383,16 +533,46 @@ class EMGPlotterMainWindow(QMainWindow):
     
     def setup_window(self):
         """Configure main window properties"""
-        self.setWindowTitle("EMG Plotter - Pretty EMG Visualization Tool")
+        self.setWindowTitle("MonStim Plotter v1.0")
+
+        # Get screen geometry for better window sizing
+        screen = QApplication.primaryScreen().geometry()
+        screen_width = screen.width()
+        screen_height = screen.height()
+        
+        # Set window size to be 80% of screen size, but with reasonable limits
+        window_width = min(max(int(screen_width * 0.8), 800), 1400)
+        window_height = min(max(int(screen_height * 0.8), 600), 900)
+        
         self.setMinimumSize(800, 600)
-        self.resize(1000, 700)
+        self.resize(window_width, window_height)
+        
+        # Center the window
+        self.move((screen_width - window_width) // 2, (screen_height - window_height) // 2)
         
         # Try to set icon if available
         try:
-            # Look for icon files in common locations
-            for icon_name in ['icon.png', 'icon.ico', 'emg_icon.png']:
-                if os.path.exists(icon_name):
-                    self.setWindowIcon(QIcon(icon_name))
+            # Function to get resource path that works for both development and PyInstaller
+            def get_resource_path(relative_path):
+                """Get absolute path to resource, works for dev and for PyInstaller"""
+                try:
+                    # PyInstaller creates a temp folder and stores path in _MEIPASS
+                    base_path = sys._MEIPASS
+                except Exception:
+                    base_path = os.path.abspath(".")
+                return os.path.join(base_path, relative_path)
+            
+            # Look for icon in src folder first, then common locations
+            icon_paths = [
+                get_resource_path(os.path.join('src', 'icon.png')),
+                'src/icon.png',
+                'icon.png', 
+                'icon.ico', 
+            ]
+            
+            for icon_path in icon_paths:
+                if os.path.exists(icon_path):
+                    self.setWindowIcon(QIcon(icon_path))
                     break
         except Exception:
             pass  # No icon available
@@ -413,13 +593,15 @@ class EMGPlotterMainWindow(QMainWindow):
         left_panel.setLayout(left_layout)
         
         # File selection widget
-        # TODO: Make the file name text readable in dark-mode (currently it is black on black)
         self.file_widget = FileSelectionWidget()
         left_layout.addWidget(self.file_widget)
         
         # Plot options widget
         self.options_widget = PlotOptionsWidget()
         left_layout.addWidget(self.options_widget, 1)  # Give it more space
+        
+        # Connect file selection to plot options
+        self.file_widget.set_file_info_callback(self.options_widget.update_recording_channel_options)
         
         # Output widget
         self.output_widget = OutputWidget()
@@ -622,6 +804,9 @@ class EMGPlotterMainWindow(QMainWindow):
 
 def main():
     """Main application entry point"""
+    # Enable high DPI scaling for PyQt6
+    QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+    
     # Check if QApplication already exists (e.g., in Jupyter or other GUI environment)
     app = QApplication.instance()
     if app is None:
@@ -631,9 +816,9 @@ def main():
         should_exec = False
     
     # Set application properties
-    app.setApplicationName("EMG Plotter")
+    app.setOrganizationName("WorthyLab")
+    app.setApplicationName("MonStim Plotter v1.0")
     app.setApplicationVersion("1.0")
-    app.setOrganizationName("Pretty EMG")
     
     # Set a more modern style
     try:

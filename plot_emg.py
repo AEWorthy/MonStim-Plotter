@@ -148,6 +148,146 @@ def create_axes_plot(
     # Reset font settings
     plt.rcParams.update(plt.rcParamsDefault)
 
+
+def add_scale_bars_to_plot(
+    ax,
+    x_range=None,
+    y_range=None,
+    x_label="Time (ms)",
+    y_label="Amplitude (mV)",
+    scale_bar_x=None,
+    scale_bar_y=None,
+    position='bottom-right',
+    line_width=2.0,
+    font_size=12,
+    color='black',
+):
+    """
+    Add scale bars directly to an existing plot.
+    
+    Parameters:
+    -----------
+    ax : matplotlib axes
+        The axes to add scale bars to
+    x_range, y_range : tuple
+        (min, max) ranges for x and y axes
+    position : str
+        Position of scale bars: 'bottom-right', 'bottom-left', 'top-right', 'top-left'
+    (Deprecated) offset_fraction : float
+        Use fixed padding in axis fraction coordinates instead for consistent appearance
+    """
+    if x_range is None or y_range is None:
+        # Get current axis limits
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        x_range = xlim if x_range is None else x_range
+        y_range = ylim if y_range is None else y_range
+
+    # Calculate the data ranges
+    x_span = x_range[1] - x_range[0]
+    y_span = y_range[1] - y_range[0]
+
+    # Get nice scale bar lengths (same function as in create_axes_plot)
+    def get_nice_scale_bar(data_span, target_fraction=0.25):
+        """Get a nice round number for scale bars"""
+        if data_span <= 0 or not isinstance(data_span, (int, float)) or data_span != data_span:
+            return 1.0
+        target_size = data_span * target_fraction
+        if target_size >= 100:
+            nice_values = [100, 200, 500]
+        elif target_size >= 10:
+            nice_values = [10, 20, 50]
+        elif target_size >= 1:
+            nice_values = [1, 2, 5]
+        elif target_size >= 0.1:
+            nice_values = [0.1, 0.2, 0.5]
+        else:
+            nice_values = [0.01, 0.02, 0.05]
+        for val in nice_values:
+            if val >= target_size * 0.5:
+                return val
+        return nice_values[-1]
+
+    if scale_bar_x is None:
+        scale_bar_x = get_nice_scale_bar(x_span)
+    if scale_bar_y is None:
+        scale_bar_y = get_nice_scale_bar(y_span)
+
+    # Use fixed padding in axis fraction coordinates (e.g., 5% from left/bottom)
+    PAD_X = -0.01  # 6% of axis width
+    PAD_Y = -0.03  # 6% of axis height
+
+    # Convert axis fraction to data coordinates
+    x_pad = PAD_X * x_span
+    y_pad = PAD_Y * y_span
+
+    if position == 'bottom-right':
+        x_start = x_range[1] - x_pad - scale_bar_x
+        y_start = y_range[0] + y_pad
+    elif position == 'bottom-left':
+        x_start = x_range[0] + x_pad
+        y_start = y_range[0] + y_pad
+    elif position == 'top-right':
+        x_start = x_range[1] - x_pad - scale_bar_x
+        y_start = y_range[1] - y_pad - scale_bar_y
+    elif position == 'top-left':
+        x_start = x_range[0] + x_pad
+        y_start = y_range[1] - y_pad - scale_bar_y
+    else:
+        x_start = x_range[1] - x_pad - scale_bar_x
+        y_start = y_range[0] + y_pad
+    
+    # Draw the L-shaped scale bars
+    # Horizontal bar (x-axis scale)
+    ax.plot([x_start, x_start + scale_bar_x], [y_start, y_start], 
+            color=color, linewidth=line_width, solid_capstyle='round', zorder=1000)
+    
+    # Vertical bar (y-axis scale)
+    ax.plot([x_start, x_start], [y_start, y_start + scale_bar_y], 
+            color=color, linewidth=line_width, solid_capstyle='round', zorder=1000)
+    
+    # Add tick marks at the ends
+    tick_size_x = x_span * 0.01  # Small tick relative to x range
+    tick_size_y = y_span * 0.01  # Small tick relative to y range
+    
+    # X-axis end tick
+    ax.plot([x_start + scale_bar_x, x_start + scale_bar_x], 
+            [y_start - tick_size_y, y_start + tick_size_y], 
+            color=color, linewidth=line_width, zorder=1000)
+    
+    # Y-axis end tick  
+    ax.plot([x_start - tick_size_x, x_start + tick_size_x], 
+            [y_start + scale_bar_y, y_start + scale_bar_y], 
+            color=color, linewidth=line_width, zorder=1000)
+    
+    # Add labels
+    x_unit = x_label.split("(")[-1].rstrip(")") if "(" in x_label else ""
+    y_unit = y_label.split("(")[-1].rstrip(")") if "(" in y_label else ""
+    
+    # Format the scale bar values
+    if scale_bar_x >= 1:
+        x_text = f"{int(scale_bar_x)} {x_unit}".strip()
+    else:
+        x_text = f"{scale_bar_x:.2f} {x_unit}".strip()
+    
+    if scale_bar_y >= 1:
+        y_text = f"{int(scale_bar_y)} {y_unit}".strip()
+    else:
+        y_text = f"{scale_bar_y:.2f} {y_unit}".strip()
+    
+    # Position labels appropriately
+    label_offset_x = tick_size_x * 3
+    label_offset_y = tick_size_y * 3
+    
+    # X-axis label (below the horizontal bar)
+    ax.text(x_start + scale_bar_x/2, y_start - label_offset_y, x_text, 
+            ha='center', va='top', fontsize=font_size, color=color, zorder=1000)
+    
+    # Y-axis label (to the left of the vertical bar, rotated)
+    ax.text(x_start - label_offset_x, y_start + scale_bar_y/2, y_text, 
+            ha='right', va='center', rotation=90, fontsize=font_size, color=color, zorder=1000)
+
+
 def plot_emg_trace(
     csv_file,
     recording_index=0,
@@ -168,7 +308,8 @@ def plot_emg_trace(
     transparent=True,
     output_file=None,
     fixed_y=False,
-    create_axes=False
+    create_axes=False,
+    plot_axes_on_trace=False
 ):
     """
     If overlay==False:
@@ -186,6 +327,9 @@ def plot_emg_trace(
     create_axes : bool, default=True
         If True and output_file is specified, creates a separate SVG file
         with clean axes that can be used as a scalable graphic in CorelDraw.
+    plot_axes_on_trace : bool, default=False
+        If True, adds scale bars directly to the trace plot itself.
+        Can be used together with create_axes for both on-plot and separate axes.
     """
     df = pd.read_csv(csv_file)
     # apply channel filter
@@ -267,8 +411,41 @@ def plot_emg_trace(
     if hide_axes:
         ax.axis('off')
 
+    # Add scale bars to the plot if requested
+    if plot_axes_on_trace:
+        # Determine the appropriate ranges for the scale bars
+        if fixed_y and not overlay:
+            y_range = (y_min_padded, y_max_padded)
+        else:
+            # Use the current plot's y-limits
+            ylim = ax.get_ylim()
+            y_range = ylim
+        
+        # Use time window if specified, otherwise use current x-limits
+        if tmin is not None and tmax is not None:
+            x_range = (tmin, tmax)
+        else:
+            xlim = ax.get_xlim()
+            x_range = xlim
+        
+        # Add scale bars to the plot
+        add_scale_bars_to_plot(
+            ax,
+            x_range=x_range,
+            y_range=y_range,
+            x_label="Time (ms)",
+            y_label="Amplitude (mV)",
+            position='bottom-left',
+            line_width=1.5,
+            font_size=10,
+            color='black'
+        )
+
     if output_file:
-        fig.savefig(
+        # Create dir if it doesn't exist
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+
+        fig.savefig( # Save the plot to the specified output file
             output_file,
             bbox_inches='tight',
             pad_inches=0,
@@ -348,6 +525,8 @@ if __name__ == '__main__':
                    help='disable fixed y-axis scaling (auto-scale each plot)')
     p.add_argument('--no-axes', action='store_true',
                    help='disable creation of separate axes SVG file')
+    p.add_argument('--plot-axes-on-trace', action='store_true',
+                   help='add scale bars directly to the trace plot')
     p.add_argument('-o', '--output', type=str,
                    help='output image file (e.g. overlay.png)')
     args = p.parse_args()
@@ -372,5 +551,6 @@ if __name__ == '__main__':
         transparent=not args.no_transparent,
         output_file=args.output,
         fixed_y=not args.no_fixed_y,
-        create_axes=not args.no_axes
+        create_axes=not args.no_axes,
+        plot_axes_on_trace=args.plot_axes_on_trace
     )

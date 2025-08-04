@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: [3.8, 3.9, "3.10", "3.11"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements_gui.txt
+
+    - name: Test imports
+      run: |
+        python -c "import plot_emg; print('plot_emg import successful')"
+        python -c "from plot_emg import plot_emg_trace; print('plot_emg_trace import successful')"
+
+    - name: Test CLI help
+      run: |
+        python plot_emg.py --help
+
+    - name: Basic functionality test with sample data
+      run: |
+        python -c "
+        import os
+        from plot_emg import plot_emg_trace
+        
+        # Find sample CSV file
+        csv_files = [f for f in os.listdir('.') if f.endswith('.csv') and 'Example' in f]
+        if csv_files:
+            print(f'Testing with {csv_files[0]}')
+            # Test basic plot creation (no output file to avoid display issues in CI)
+            try:
+                plot_emg_trace(csv_files[0], recording_index=0, channel_index=0)
+                print('Basic plotting test passed')
+            except Exception as e:
+                print(f'Plotting test failed: {e}')
+                raise
+        else:
+            print('No sample CSV files found for testing')
+        "
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.9
+
+    - name: Install linting tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8
+
+    - name: Lint with flake8
+      run: |
+        # Stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Exit-zero treats all errors as warnings. GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics

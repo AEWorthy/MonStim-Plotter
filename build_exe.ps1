@@ -60,27 +60,19 @@ Write-Host "================================================" -ForegroundColor G
 Write-Host "Build completed successfully!" -ForegroundColor Green
 Write-Host "================================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "Your executable is located at: dist\EMG_Plotter.exe" -ForegroundColor Cyan
+Write-Host "Your executable is located at: dist\MonStim Plotter.exe" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "You can now distribute this executable to other Windows users." -ForegroundColor White
 Write-Host "They don't need Python or any other dependencies installed." -ForegroundColor White
 Write-Host ""
 
 # Check if executable was created
-if (Test-Path "dist\EMG_Plotter.exe") {
-    $fileInfo = Get-Item "dist\EMG_Plotter.exe"
+if (Test-Path "dist\MonStim Plotter.exe") {
+    $fileInfo = Get-Item "dist\MonStim Plotter.exe"
     Write-Host "✓ Executable created successfully" -ForegroundColor Green
     Write-Host "File size: $([Math]::Round($fileInfo.Length / 1MB, 2)) MB" -ForegroundColor White
     Write-Host ""
     
-    $choice = Read-Host "Would you like to test the executable now? (y/n)"
-    if ($choice -eq "y" -or $choice -eq "Y") {
-        Write-Host "Testing executable..." -ForegroundColor Yellow
-        Start-Process "dist\EMG_Plotter.exe"
-    }
 } else {
     Write-Host "⚠ WARNING: Executable was not found at expected location" -ForegroundColor Yellow
 }
-
-Write-Host ""
-Read-Host "Press Enter to exit"
