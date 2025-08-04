@@ -35,23 +35,21 @@ def create_axes_plot(
     # Calculate sensible scale bar lengths (about 1/4 to 1/5 of the data range)
     def get_nice_scale_bar(data_span, target_fraction=0.25):
         """Get a nice round number for scale bars"""
+        if data_span <= 0 or not isinstance(data_span, (int, float)) or data_span != data_span:  # Check for NaN/Inf
+            return 1.0  # Default fallback
+            
         target_size = data_span * target_fraction
         
-        # Find the appropriate magnitude
+        # Find the appropriate magnitude and choose nice values
         if target_size >= 100:
-            magnitude = 100
             nice_values = [100, 200, 500]
         elif target_size >= 10:
-            magnitude = 10
             nice_values = [10, 20, 50]
         elif target_size >= 1:
-            magnitude = 1
             nice_values = [1, 2, 5]
         elif target_size >= 0.1:
-            magnitude = 0.1
             nice_values = [0.1, 0.2, 0.5]
         else:
-            magnitude = 0.01
             nice_values = [0.01, 0.02, 0.05]
         
         # Choose the best value
@@ -197,11 +195,16 @@ def plot_emg_trace(
     if fixed_y and not overlay:
         y_min = df['amplitude_mV'].min()
         y_max = df['amplitude_mV'].max()
-        # Add some padding (5% on each side)
-        y_range = y_max - y_min
-        y_padding = y_range * 0.05
-        y_min_padded = y_min - y_padding
-        y_max_padded = y_max + y_padding
+        
+        # Validate y-limits
+        if pd.isna(y_min) or pd.isna(y_max) or y_min == y_max:
+            fixed_y = False  # Disable fixed scaling if invalid
+        else:
+            # Add some padding (5% on each side)
+            y_range = y_max - y_min
+            y_padding = y_range * 0.05
+            y_min_padded = y_min - y_padding
+            y_max_padded = y_max + y_padding
     
     # apply time window
     if tmin is not None:
