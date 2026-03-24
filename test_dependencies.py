@@ -13,24 +13,24 @@ def test_imports():
     
     print("Testing critical imports...")
     
-    # Test PyQt6
+    # Test PySide6
     try:
-        from PyQt6.QtWidgets import QApplication, QMainWindow
-        from PyQt6.QtCore import QThread, pyqtSignal, Qt
-        from PyQt6.QtGui import QFont, QIcon, QColor
-        print("✓ PyQt6 imports successful")
+        from PySide6.QtWidgets import QApplication, QMainWindow
+        from PySide6.QtCore import QThread, Signal, Qt
+        from PySide6.QtGui import QFont, QIcon, QColor
+        print("✓ PySide6 imports successful")
     except ImportError as e:
-        errors.append(f"PyQt6 import failed: {e}")
-        print(f"✗ PyQt6 import failed: {e}")
+        errors.append(f"PySide6 import failed: {e}")
+        print(f"✗ PySide6 import failed: {e}")
     
     # Test matplotlib
     try:
         import matplotlib
-        matplotlib.use('Qt5Agg')  # Set backend
+        matplotlib.use('QtAgg')  # Set backend
         import matplotlib.pyplot as plt
         from matplotlib import cm
         from matplotlib.colors import Normalize
-        from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+        from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
         print("✓ Matplotlib imports successful")
     except ImportError as e:
         errors.append(f"Matplotlib import failed: {e}")

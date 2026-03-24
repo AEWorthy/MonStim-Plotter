@@ -6,7 +6,7 @@ Simple launcher script for the standalone executable
 
 import sys
 import traceback
-from PyQt6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 def show_error_dialog(title, message):
     """Show an error dialog if possible, otherwise print to stderr"""

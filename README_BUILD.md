@@ -58,7 +58,7 @@ The build process is configured through `emg_plotter.spec` with these settings:
 
 The executable automatically includes:
 - **Python Runtime**: Complete Python environment
-- **Required Libraries**: PyQt6, matplotlib, pandas, numpy, and dependencies
+- **Required Libraries**: PySide6, matplotlib, pandas, numpy, and dependencies
 - **Sample Data**: Example CSV files for immediate testing
 - **Documentation**: README files converted to text format
 - **Resources**: Application icons and images

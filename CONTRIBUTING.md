@@ -95,7 +95,7 @@ Feature requests are welcome! Please:
 ```
 MonStim-Plotter/
 ├── plot_emg.py              # Core plotting functions and CLI
-├── emg_plotter_gui.py       # PyQt6 GUI application
+├── emg_plotter_gui.py       # PySide6 GUI application
 ├── launcher.py              # Entry point for executable
 ├── example_usage.py         # Code examples
 ├── requirements_*.txt       # Dependencies

@@ -7,7 +7,7 @@ This document provides a quick reference for all files in the MonStim Plotter pr
 | File | Purpose |
 |------|---------|
 | `plot_emg.py` | Core plotting functions and command-line interface |
-| `emg_plotter_gui.py` | PyQt6 graphical user interface |
+| `emg_plotter_gui.py` | PySide6 graphical user interface |
 | `launcher.py` | Entry point for standalone executable builds |
 | `example_usage.py` | Code examples and tutorials |
 

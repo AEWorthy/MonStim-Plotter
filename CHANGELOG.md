@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Initial public release of MonStim Plotter toolkit
-- PyQt6-based graphical user interface for EMG data visualization
+- PySide6-based graphical user interface for EMG data visualization
 - Command-line interface with comprehensive options
 - Support for single trace and overlay plotting modes
 - Multiple output formats (PNG, SVG, PDF)
@@ -39,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Troubleshooting guides for common issues
 
 ### Dependencies
-- PyQt6 >= 6.4.0 for GUI framework
+- PySide6 >= 6.4.0 for GUI framework
 - pandas >= 1.3.0 for data handling
 - matplotlib >= 3.5.0 for plotting
 - numpy >= 1.20.0 for numerical computations

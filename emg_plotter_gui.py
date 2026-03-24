@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-EMG Plotter GUI - A lightweight PyQt6 application for plotting EMG traces
+EMG Plotter GUI - A lightweight PySide6 application for plotting EMG traces
 Author: Andrew Worthy
 Based on the plot_emg.py script
 """
@@ -8,19 +8,19 @@ Based on the plot_emg.py script
 import sys
 import os
 
-# Set matplotlib backend before importing PyQt6 to avoid conflicts
+# Set matplotlib backend before importing PySide6 to avoid conflicts
 import matplotlib
-# Ensure we have a GUI backend that works with PyQt6
-matplotlib.use('Qt5Agg')
+# Ensure we have a GUI backend that works with PySide6
+matplotlib.use('QtAgg')
 
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QFormLayout, QGroupBox, QPushButton, QLabel, QLineEdit, QFileDialog, 
     QComboBox, QSpinBox, QDoubleSpinBox, QCheckBox, QTextEdit, QMessageBox,
     QProgressBar, QTabWidget, QFrame, QColorDialog
 )
-from PyQt6.QtCore import QThread, pyqtSignal, Qt
-from PyQt6.QtGui import QFont, QIcon, QColor
+from PySide6.QtCore import QThread, Signal, Qt
+from PySide6.QtGui import QFont, QIcon, QColor
 
 # Import the plotting functions from our existing script
 from plot_emg import plot_emg_trace
@@ -30,9 +30,9 @@ import pandas as pd
 
 class PlottingWorker(QThread):
     """Worker thread for plotting operations to prevent GUI freezing"""
-    finished = pyqtSignal()
-    error = pyqtSignal(str)
-    progress = pyqtSignal(str)
+    finished = Signal()
+    error = Signal(str)
+    progress = Signal(str)
 
     def __init__(self, plot_function, **kwargs):
         super().__init__()
@@ -804,7 +804,7 @@ class EMGPlotterMainWindow(QMainWindow):
 
 def main():
     """Main application entry point"""
-    # Enable high DPI scaling for PyQt6
+    # Enable high DPI scaling for PySide6
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     
     # Check if QApplication already exists (e.g., in Jupyter or other GUI environment)

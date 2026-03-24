@@ -29,7 +29,7 @@ python plot_emg.py your_data.csv --overlay --output result.png
 - **Scalable Graphics**: Auto-generated SVG axes for use in CorelDraw/Illustrator
 
 ### User Interfaces
-- **Graphical Interface**: PyQt6-based GUI with intuitive controls
+- **Graphical Interface**: PySide6-based GUI with intuitive controls
 - **Command Line**: Full-featured CLI with extensive options
 - **Programmatic**: Import as Python module for custom workflows
 
@@ -44,7 +44,7 @@ python plot_emg.py your_data.csv --overlay --output result.png
 ```
 MonStim-Plotter/
 ├── plot_emg.py              # Core plotting functions and CLI
-├── emg_plotter_gui.py       # PyQt6 GUI application
+├── emg_plotter_gui.py       # PySide6 GUI application
 ├── launcher.py              # Entry point for executable builds
 ├── requirements_gui.txt     # Python dependencies for GUI
 ├── requirements_build.txt   # Dependencies for building executable
@@ -71,7 +71,7 @@ pip install -r requirements_gui.txt
 
 ### Option 2: Manual Installation
 ```bash
-pip install PyQt6 pandas matplotlib numpy
+pip install PySide6 pandas matplotlib numpy
 ```
 
 ## Usage
@@ -210,9 +210,9 @@ plot_emg_trace(
 
 ### Common Issues
 
-1. **"ModuleNotFoundError: No module named 'PyQt6'"**
+1. **"ModuleNotFoundError: No module named 'PySide6'"**
    ```bash
-   pip install PyQt6
+    pip install PySide6
    ```
 
 2. **"No module named 'plot_emg'"**
