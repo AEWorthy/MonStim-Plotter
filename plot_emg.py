@@ -6,6 +6,38 @@ from matplotlib import cm
 from matplotlib.colors import Normalize
 import os
 
+
+def get_nice_scale_bar(data_span, target_fraction=0.25):
+    """Return a readable scale-bar length based on a data span."""
+    if data_span <= 0 or not isinstance(data_span, (int, float)) or data_span != data_span:
+        return 1.0
+
+    target_size = data_span * target_fraction
+
+    if target_size >= 100:
+        nice_values = [100, 200, 500]
+    elif target_size >= 10:
+        nice_values = [10, 20, 50]
+    elif target_size >= 1:
+        nice_values = [1, 2, 5]
+    elif target_size >= 0.1:
+        nice_values = [0.1, 0.2, 0.5]
+    else:
+        nice_values = [0.01, 0.02, 0.05]
+
+    for val in nice_values:
+        if val >= target_size * 0.5:
+            return val
+    return nice_values[-1]
+
+
+def format_scale_value(value):
+    """Format scale values without dropping useful precision."""
+    if value >= 1:
+        # Keep integers clean, otherwise preserve a compact decimal representation.
+        return str(int(value)) if float(value).is_integer() else f"{value:g}"
+    return f"{value:.3g}"
+
 def create_axes_plot(
     output_file,
     x_range=None,
@@ -31,99 +63,97 @@ def create_axes_plot(
     # Calculate the actual data ranges
     x_span = x_range[1] - x_range[0]
     y_span = y_range[1] - y_range[0]
-    
-    # Calculate sensible scale bar lengths (about 1/4 to 1/5 of the data range)
-    def get_nice_scale_bar(data_span, target_fraction=0.25):
-        """Get a nice round number for scale bars"""
-        if data_span <= 0 or not isinstance(data_span, (int, float)) or data_span != data_span:  # Check for NaN/Inf
-            return 1.0  # Default fallback
-            
-        target_size = data_span * target_fraction
-        
-        # Find the appropriate magnitude and choose nice values
-        if target_size >= 100:
-            nice_values = [100, 200, 500]
-        elif target_size >= 10:
-            nice_values = [10, 20, 50]
-        elif target_size >= 1:
-            nice_values = [1, 2, 5]
-        elif target_size >= 0.1:
-            nice_values = [0.1, 0.2, 0.5]
-        else:
-            nice_values = [0.01, 0.02, 0.05]
-        
-        # Choose the best value
-        for val in nice_values:
-            if val >= target_size * 0.5:
-                return val
-        return nice_values[-1]
+
+    if x_span <= 0 or y_span <= 0:
+        raise ValueError("x_range and y_range must be increasing ranges")
     
     if scale_bar_x is None:
         scale_bar_x = get_nice_scale_bar(x_span)
     if scale_bar_y is None:
         scale_bar_y = get_nice_scale_bar(y_span)
-    
-    # Set up the plot with clean settings
-    plt.rcParams['font.family'] = 'Arial'
-    plt.rcParams['font.size'] = font_size
-    plt.rcParams['font.weight'] = 'normal'
+
+    # Clamp bars so they always fit cleanly inside the visible ranges.
+    scale_bar_x = min(scale_bar_x, x_span * 0.8)
+    scale_bar_y = min(scale_bar_y, y_span * 0.8)
     
     fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-    
-    # Create axes that are properly scaled to the data
-    # The axes should represent the actual proportion of the scale bars to the data
-    x_axis_length = (scale_bar_x / x_span) * 8  # 8 units for visual appeal
-    y_axis_length = (scale_bar_y / y_span) * 8  # 8 units for visual appeal
-    
-    origin_x, origin_y = 0, 0
-    
-    # Main L-shaped axes - these represent the scale bars themselves
-    ax.plot([origin_x, origin_x], [origin_y, y_axis_length], 
-            'k-', linewidth=line_width, solid_capstyle='round')
-    ax.plot([origin_x, x_axis_length], [origin_y, origin_y], 
-            'k-', linewidth=line_width, solid_capstyle='round')
-    
-    # Add tick marks at the ends to show the scale
-    tick_size = min(x_axis_length, y_axis_length) * 0.05
-    
-    # X-axis end tick
-    ax.plot([x_axis_length, x_axis_length], [-tick_size, tick_size], 
-            'k-', linewidth=line_width)
-    
-    # Y-axis end tick  
-    ax.plot([-tick_size, tick_size], [y_axis_length, y_axis_length], 
-            'k-', linewidth=line_width)
+
+    # Place bars in the lower-left with positive padding inside real data units.
+    x_pad = x_span * 0.08
+    y_pad = y_span * 0.08
+    origin_x = x_range[0] + x_pad
+    origin_y = y_range[0] + y_pad
+
+    # End ticks sized as a fraction of plot spans.
+    tick_size_x = x_span * 0.012
+    tick_size_y = y_span * 0.012
+
+    line_kwargs = dict(
+        color='black',
+        linewidth=line_width,
+        antialiased=False,
+        solid_capstyle='projecting',
+        solid_joinstyle='miter',
+    )
+
+    # Draw feet first, then the main axis bars on top to avoid anti-aliased seams.
+    ax.plot(
+        [origin_x + scale_bar_x, origin_x + scale_bar_x],
+        [origin_y - tick_size_y, origin_y + tick_size_y],
+        **line_kwargs,
+    )
+    ax.plot(
+        [origin_x - tick_size_x, origin_x + tick_size_x],
+        [origin_y + scale_bar_y, origin_y + scale_bar_y],
+        **line_kwargs,
+    )
+
+    # Main L-shaped bars in data coordinates.
+    ax.plot(
+        [origin_x, origin_x + scale_bar_x],
+        [origin_y, origin_y],
+        **line_kwargs,
+    )
+    ax.plot(
+        [origin_x, origin_x],
+        [origin_y, origin_y + scale_bar_y],
+        **line_kwargs,
+    )
     
     # Labels with proper formatting
     x_unit = x_label.split("(")[-1].rstrip(")") if "(" in x_label else ""
     y_unit = y_label.split("(")[-1].rstrip(")") if "(" in y_label else ""
     
-    # Format the scale bar values appropriately
-    if scale_bar_x >= 1:
-        x_text = f"{int(scale_bar_x)} {x_unit}".strip()
-    else:
-        x_text = f"{scale_bar_x:.2f} {x_unit}".strip()
-    
-    if scale_bar_y >= 1:
-        y_text = f"{int(scale_bar_y)} {y_unit}".strip()
-    else:
-        y_text = f"{scale_bar_y:.2f} {y_unit}".strip()
-    
-    # Position labels clearly
-    ax.text(x_axis_length/2, -tick_size * 4, x_text, 
-            ha='center', va='top', fontsize=font_size)
-    
-    ax.text(-tick_size * 4, y_axis_length/2, y_text, 
-            ha='right', va='center', rotation=90, fontsize=font_size)
-    
-    # Set limits with appropriate padding
-    padding = max(x_axis_length, y_axis_length) * 0.3
-    
-    ax.set_xlim(-padding, x_axis_length + padding * 0.5)
-    ax.set_ylim(-padding, y_axis_length + padding * 0.5)
-    
-    # Make sure axes are equal so scale is preserved
-    ax.set_aspect('equal')
+    x_text = f"{format_scale_value(scale_bar_x)} {x_unit}".strip()
+    y_text = f"{format_scale_value(scale_bar_y)} {y_unit}".strip()
+
+    label_offset_x = x_span * 0.03
+    label_offset_y = y_span * 0.03
+
+    ax.text(
+        origin_x + scale_bar_x / 2,
+        origin_y - label_offset_y,
+        x_text,
+        ha='center',
+        va='top',
+        fontsize=font_size,
+        color='black'
+    )
+
+    ax.text(
+        origin_x - label_offset_x,
+        origin_y + scale_bar_y / 2,
+        y_text,
+        ha='right',
+        va='center',
+        rotation=90,
+        fontsize=font_size,
+        color='black'
+    )
+
+    # Keep exported SVG coordinate system aligned to the source data ranges.
+    ax.set_xlim(x_range)
+    ax.set_ylim(y_range)
     
     # Clean appearance
     ax.axis('off')
@@ -144,15 +174,13 @@ def create_axes_plot(
     )
     plt.close(fig)
     print(f"Saved axes plot to {axes_file}")
-    
-    # Reset font settings
-    plt.rcParams.update(plt.rcParamsDefault)
 
 
 def add_scale_bars_to_plot(
     ax,
     x_range=None,
     y_range=None,
+    data_y_min=None,
     x_label="Time (ms)",
     y_label="Amplitude (mV)",
     scale_bar_x=None,
@@ -161,6 +189,7 @@ def add_scale_bars_to_plot(
     line_width=2.0,
     font_size=12,
     color='black',
+    place_outside_vertical=True,
 ):
     """
     Add scale bars directly to an existing plot.
@@ -171,8 +200,13 @@ def add_scale_bars_to_plot(
         The axes to add scale bars to
     x_range, y_range : tuple
         (min, max) ranges for x and y axes
+    data_y_min : float or None
+        Minimum plotted-data y value used to place bars below the trace envelope.
     position : str
         Position of scale bars: 'bottom-right', 'bottom-left', 'top-right', 'top-left'
+    place_outside_vertical : bool
+        If True and a bottom position is used, place scale bars below the plotted
+        data envelope and expand the lower y-limit as needed to avoid clipping.
     (Deprecated) offset_fraction : float
         Use fixed padding in axis fraction coordinates instead for consistent appearance
     """
@@ -183,97 +217,117 @@ def add_scale_bars_to_plot(
         x_range = xlim if x_range is None else x_range
         y_range = ylim if y_range is None else y_range
 
-    # Calculate the data ranges
+    # Preserve current view so adding bars never recenters/reframes data.
+    original_xlim = ax.get_xlim()
+    original_ylim = ax.get_ylim()
+    original_autoscale = ax.get_autoscale_on()
+
+    # Calculate data ranges
     x_span = x_range[1] - x_range[0]
     y_span = y_range[1] - y_range[0]
 
-    # Get nice scale bar lengths (same function as in create_axes_plot)
-    def get_nice_scale_bar(data_span, target_fraction=0.25):
-        """Get a nice round number for scale bars"""
-        if data_span <= 0 or not isinstance(data_span, (int, float)) or data_span != data_span:
-            return 1.0
-        target_size = data_span * target_fraction
-        if target_size >= 100:
-            nice_values = [100, 200, 500]
-        elif target_size >= 10:
-            nice_values = [10, 20, 50]
-        elif target_size >= 1:
-            nice_values = [1, 2, 5]
-        elif target_size >= 0.1:
-            nice_values = [0.1, 0.2, 0.5]
-        else:
-            nice_values = [0.01, 0.02, 0.05]
-        for val in nice_values:
-            if val >= target_size * 0.5:
-                return val
-        return nice_values[-1]
+    if x_span <= 0 or y_span <= 0:
+        return
 
     if scale_bar_x is None:
         scale_bar_x = get_nice_scale_bar(x_span)
     if scale_bar_y is None:
         scale_bar_y = get_nice_scale_bar(y_span)
 
-    # Use fixed padding in axis fraction coordinates (e.g., 5% from left/bottom)
-    PAD_X = -0.01  # 6% of axis width
-    PAD_Y = -0.03  # 6% of axis height
+    # Ensure bars always fit inside visible limits.
+    scale_bar_x = min(scale_bar_x, x_span * 0.8)
+    scale_bar_y = min(scale_bar_y, y_span * 0.8)
+
+    # Use positive inset padding so bars are always on-canvas.
+    PAD_X = 0.06
+    PAD_Y = 0.06
 
     # Convert axis fraction to data coordinates
     x_pad = PAD_X * x_span
     y_pad = PAD_Y * y_span
 
-    if position == 'bottom-right':
-        x_start = x_range[1] - x_pad - scale_bar_x
-        y_start = y_range[0] + y_pad
-    elif position == 'bottom-left':
+    if position == 'bottom-left':
         x_start = x_range[0] + x_pad
         y_start = y_range[0] + y_pad
-    elif position == 'top-right':
+    elif position == 'bottom-right':
         x_start = x_range[1] - x_pad - scale_bar_x
-        y_start = y_range[1] - y_pad - scale_bar_y
+        y_start = y_range[0] + y_pad
     elif position == 'top-left':
         x_start = x_range[0] + x_pad
+        y_start = y_range[1] - y_pad - scale_bar_y
+    elif position == 'top-right':
+        x_start = x_range[1] - x_pad - scale_bar_x
         y_start = y_range[1] - y_pad - scale_bar_y
     else:
         x_start = x_range[1] - x_pad - scale_bar_x
         y_start = y_range[0] + y_pad
-    
-    # Draw the L-shaped scale bars
-    # Horizontal bar (x-axis scale)
-    ax.plot([x_start, x_start + scale_bar_x], [y_start, y_start], 
-            color=color, linewidth=line_width, solid_capstyle='round', zorder=1000)
-    
-    # Vertical bar (y-axis scale)
-    ax.plot([x_start, x_start], [y_start, y_start + scale_bar_y], 
-            color=color, linewidth=line_width, solid_capstyle='round', zorder=1000)
     
     # Add tick marks at the ends
     tick_size_x = x_span * 0.01  # Small tick relative to x range
     tick_size_y = y_span * 0.01  # Small tick relative to y range
+
+    # Move bottom-position scale bars below data traces to avoid overlap/clipping.
+    keep_expanded_ylim = False
+    if place_outside_vertical and position in ('bottom-left', 'bottom-right'):
+        if data_y_min is None:
+            detected_data_y_min = None
+            for line in ax.lines:
+                y_vals = line.get_ydata(orig=False)
+                if y_vals is None or len(y_vals) == 0:
+                    continue
+                try:
+                    line_min = min(y_vals)
+                except Exception:
+                    continue
+                detected_data_y_min = line_min if detected_data_y_min is None else min(detected_data_y_min, line_min)
+
+            data_y_min = detected_data_y_min if detected_data_y_min is not None else original_ylim[0]
+
+        # Keep a clear visual gap between waveform and scale-axis block.
+        gap_above_bar = max(y_span * 0.10, tick_size_y * 6)
+        y_start = data_y_min - gap_above_bar - scale_bar_y
+
+        # Reserve room for the bar + ticks + label below it.
+        label_room = max(y_span * 0.10, tick_size_y * 10)
+        needed_ymin = y_start - tick_size_y - label_room
+        if needed_ymin < original_ylim[0]:
+            ax.set_ylim(needed_ymin, original_ylim[1])
+            keep_expanded_ylim = True
     
+    line_kwargs = dict(
+        color=color,
+        linewidth=line_width,
+        zorder=1000,
+        antialiased=False,
+        solid_capstyle='projecting',
+        solid_joinstyle='miter',
+        scalex=False,
+        scaley=False,
+    )
+
+    # Draw feet first, then bars on top to prevent visible seams.
     # X-axis end tick
     ax.plot([x_start + scale_bar_x, x_start + scale_bar_x], 
             [y_start - tick_size_y, y_start + tick_size_y], 
-            color=color, linewidth=line_width, zorder=1000)
+            **line_kwargs)
     
     # Y-axis end tick  
     ax.plot([x_start - tick_size_x, x_start + tick_size_x], 
             [y_start + scale_bar_y, y_start + scale_bar_y], 
-            color=color, linewidth=line_width, zorder=1000)
+            **line_kwargs)
+
+    # Horizontal bar (x-axis scale)
+    ax.plot([x_start, x_start + scale_bar_x], [y_start, y_start], **line_kwargs)
+
+    # Vertical bar (y-axis scale)
+    ax.plot([x_start, x_start], [y_start, y_start + scale_bar_y], **line_kwargs)
     
     # Add labels
     x_unit = x_label.split("(")[-1].rstrip(")") if "(" in x_label else ""
     y_unit = y_label.split("(")[-1].rstrip(")") if "(" in y_label else ""
-    
-    # Format the scale bar values
-    if scale_bar_x >= 1:
-        x_text = f"{int(scale_bar_x)} {x_unit}".strip()
-    else:
-        x_text = f"{scale_bar_x:.2f} {x_unit}".strip()
-    
-    if scale_bar_y >= 1:
-        y_text = f"{int(scale_bar_y)} {y_unit}".strip()
-    else:
-        y_text = f"{scale_bar_y:.2f} {y_unit}".strip()
+
+    x_text = f"{format_scale_value(scale_bar_x)} {x_unit}".strip()
+    y_text = f"{format_scale_value(scale_bar_y)} {y_unit}".strip()
     
     # Position labels appropriately
     label_offset_x = tick_size_x * 3
@@ -286,6 +340,12 @@ def add_scale_bars_to_plot(
     # Y-axis label (to the left of the vertical bar, rotated)
     ax.text(x_start - label_offset_x, y_start + scale_bar_y/2, y_text, 
             ha='right', va='center', rotation=90, fontsize=font_size, color=color, zorder=1000)
+
+    # Restore limits/autoscale state in case backends update view from new artists.
+    ax.set_xlim(original_xlim)
+    if not keep_expanded_ylim:
+        ax.set_ylim(original_ylim)
+    ax.set_autoscale_on(original_autoscale)
 
 
 def plot_emg_trace(
@@ -309,7 +369,11 @@ def plot_emg_trace(
     output_file=None,
     fixed_y=False,
     create_axes=False,
-    plot_axes_on_trace=False
+    plot_axes_on_trace=False,
+    x_min=None,
+    x_max=None,
+    y_min=None,
+    y_max=None
 ):
     """
     If overlay==False:
@@ -330,6 +394,12 @@ def plot_emg_trace(
     plot_axes_on_trace : bool, default=False
         If True, adds scale bars directly to the trace plot itself.
         Can be used together with create_axes for both on-plot and separate axes.
+    x_min, x_max : float or None
+        Manual x-axis limits. When either is provided, x-axis auto/fitted limits are
+        overridden by the provided values.
+    y_min, y_max : float or None
+        Manual y-axis limits. When either is provided, y-axis auto/fixed_y limits are
+        overridden by the provided values.
     """
     df = pd.read_csv(csv_file)
     # apply channel filter
@@ -337,18 +407,18 @@ def plot_emg_trace(
     
     # Calculate global y-limits for fixed scaling if needed
     if fixed_y and not overlay:
-        y_min = df['amplitude_mV'].min()
-        y_max = df['amplitude_mV'].max()
+        fixed_data_y_min = df['amplitude_mV'].min()
+        fixed_data_y_max = df['amplitude_mV'].max()
         
         # Validate y-limits
-        if pd.isna(y_min) or pd.isna(y_max) or y_min == y_max:
+        if pd.isna(fixed_data_y_min) or pd.isna(fixed_data_y_max) or fixed_data_y_min == fixed_data_y_max:
             fixed_y = False  # Disable fixed scaling if invalid
         else:
             # Add some padding (5% on each side)
-            y_range = y_max - y_min
-            y_padding = y_range * 0.05
-            y_min_padded = y_min - y_padding
-            y_max_padded = y_max + y_padding
+            fixed_y_range = fixed_data_y_max - fixed_data_y_min
+            y_padding = fixed_y_range * 0.05
+            y_min_padded = fixed_data_y_min - y_padding
+            y_max_padded = fixed_data_y_max + y_padding
     
     # apply time window
     if tmin is not None:
@@ -400,12 +470,37 @@ def plot_emg_trace(
             linewidth=linewidth
         )
 
-    # enforce x‐limits if cropping
-    if tmin is not None or tmax is not None:
-        ax.set_xlim(tmin, tmax)
-    
-    # enforce y-limits for consistent scaling if fixed_y is True
-    if fixed_y and not overlay:
+    # Track actual plotted-data vertical extent for robust scale-bar placement.
+    if overlay:
+        plotted_data_y_min = df['amplitude_mV'].min()
+    else:
+        plotted_data_y_min = sel['amplitude_mV'].min()
+
+    if pd.isna(plotted_data_y_min):
+        plotted_data_y_min = ax.get_ylim()[0]
+
+    # Apply x-axis limits: manual values take priority over time window limits.
+    if x_min is not None or x_max is not None:
+        current_xlim = ax.get_xlim()
+        ax.set_xlim(
+            x_min if x_min is not None else current_xlim[0],
+            x_max if x_max is not None else current_xlim[1],
+        )
+    elif tmin is not None or tmax is not None:
+        current_xlim = ax.get_xlim()
+        ax.set_xlim(
+            tmin if tmin is not None else current_xlim[0],
+            tmax if tmax is not None else current_xlim[1],
+        )
+
+    # Apply y-axis limits: manual values take priority over fixed_y limits.
+    if y_min is not None or y_max is not None:
+        current_ylim = ax.get_ylim()
+        ax.set_ylim(
+            y_min if y_min is not None else current_ylim[0],
+            y_max if y_max is not None else current_ylim[1],
+        )
+    elif fixed_y and not overlay:
         ax.set_ylim(y_min_padded, y_max_padded)
 
     if hide_axes:
@@ -414,15 +509,21 @@ def plot_emg_trace(
     # Add scale bars to the plot if requested
     if plot_axes_on_trace:
         # Determine the appropriate ranges for the scale bars
-        if fixed_y and not overlay:
+        if y_min is not None or y_max is not None:
+            ylim = ax.get_ylim()
+            y_range = (ylim[0], ylim[1])
+        elif fixed_y and not overlay:
             y_range = (y_min_padded, y_max_padded)
         else:
             # Use the current plot's y-limits
             ylim = ax.get_ylim()
             y_range = ylim
         
-        # Use time window if specified, otherwise use current x-limits
-        if tmin is not None and tmax is not None:
+        # Use the final rendered x-limits so scale bars match manual/cropped axes.
+        if x_min is not None or x_max is not None:
+            xlim = ax.get_xlim()
+            x_range = (xlim[0], xlim[1])
+        elif tmin is not None and tmax is not None:
             x_range = (tmin, tmax)
         else:
             xlim = ax.get_xlim()
@@ -433,6 +534,7 @@ def plot_emg_trace(
             ax,
             x_range=x_range,
             y_range=y_range,
+            data_y_min=plotted_data_y_min,
             x_label="Time (ms)",
             y_label="Amplitude (mV)",
             position='bottom-left',
@@ -457,7 +559,10 @@ def plot_emg_trace(
         # Create axes plot if requested
         if create_axes:
             # Determine the appropriate ranges for the axes
-            if fixed_y and not overlay:
+            if y_min is not None or y_max is not None:
+                ylim = ax.get_ylim()
+                y_range = (ylim[0], ylim[1])
+            elif fixed_y and not overlay:
                 y_range = (y_min_padded, y_max_padded)
             else:
                 # Use the current plot's y-limits
@@ -465,13 +570,16 @@ def plot_emg_trace(
                 current_y_max = sel['amplitude_mV'].max() if not overlay else df['amplitude_mV'].max()
                 y_range = (current_y_min, current_y_max)
             
-            # Use time window if specified, otherwise use data range
-            if tmin is not None and tmax is not None:
+            # Use final rendered x-limits so external axes match the trace plot.
+            if x_min is not None or x_max is not None:
+                xlim = ax.get_xlim()
+                x_range = (xlim[0], xlim[1])
+            elif tmin is not None and tmax is not None:
                 x_range = (tmin, tmax)
             else:
-                x_min = df['time_point'].min()
-                x_max = df['time_point'].max()
-                x_range = (x_min, x_max)
+                data_x_min = df['time_point'].min()
+                data_x_max = df['time_point'].max()
+                x_range = (data_x_min, data_x_max)
             
             create_axes_plot(
                 output_file,
@@ -527,6 +635,14 @@ if __name__ == '__main__':
                    help='disable creation of separate axes SVG file')
     p.add_argument('--plot-axes-on-trace', action='store_true',
                    help='add scale bars directly to the trace plot')
+    p.add_argument('--x-min', type=float, default=None,
+                   help='manual minimum x-axis value')
+    p.add_argument('--x-max', type=float, default=None,
+                   help='manual maximum x-axis value')
+    p.add_argument('--y-min', type=float, default=None,
+                   help='manual minimum y-axis value')
+    p.add_argument('--y-max', type=float, default=None,
+                   help='manual maximum y-axis value')
     p.add_argument('-o', '--output', type=str,
                    help='output image file (e.g. overlay.png)')
     args = p.parse_args()
@@ -552,5 +668,9 @@ if __name__ == '__main__':
         output_file=args.output,
         fixed_y=not args.no_fixed_y,
         create_axes=not args.no_axes,
-        plot_axes_on_trace=args.plot_axes_on_trace
+        plot_axes_on_trace=args.plot_axes_on_trace,
+        x_min=args.x_min,
+        x_max=args.x_max,
+        y_min=args.y_min,
+        y_max=args.y_max
     )

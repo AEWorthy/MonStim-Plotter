@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QComboBox, QSpinBox, QDoubleSpinBox, QCheckBox, QTextEdit, QMessageBox,
     QProgressBar, QTabWidget, QFrame, QColorDialog
 )
-from PySide6.QtCore import QThread, Signal, Qt
+from PySide6.QtCore import QThread, Signal, Qt, QTimer
 from PySide6.QtGui import QFont, QIcon, QColor
 
 # Import the plotting functions from our existing script
@@ -60,10 +60,18 @@ class FileSelectionWidget(QGroupBox):
     def __init__(self):
         super().__init__("File Selection")
         self.csv_file = None
+        self.last_mtime = None
         self.available_recordings = []
         self.available_channels = []
+        self.recording_channel_pairs = []
         self.file_info_callback = None  # Callback for when file info is updated
         self.setup_ui()
+
+        # Watch for external edits to the selected file and refresh selectors/info.
+        self.file_watch_timer = QTimer(self)
+        self.file_watch_timer.setInterval(2000)
+        self.file_watch_timer.timeout.connect(self.check_for_file_updates)
+        self.file_watch_timer.start()
         
     def set_file_info_callback(self, callback):
         """Set callback function to be called when file info is updated"""
@@ -78,9 +86,15 @@ class FileSelectionWidget(QGroupBox):
         self.file_label.setStyleSheet("QLabel { color: palette(disabled-text); font-style: italic; }")
         self.browse_button = QPushButton("Browse CSV File...")
         self.browse_button.clicked.connect(self.browse_file)
+
+        self.refresh_button = QPushButton("Refresh")
+        self.refresh_button.clicked.connect(self.refresh_file_info)
+        self.refresh_button.setToolTip("Reload CSV metadata and refresh recording/channel selectors")
+        self.refresh_button.setEnabled(False)
         
         file_row.addWidget(self.file_label, 1)
         file_row.addWidget(self.browse_button)
+        file_row.addWidget(self.refresh_button)
         layout.addLayout(file_row)
         
         # File info
@@ -106,11 +120,34 @@ class FileSelectionWidget(QGroupBox):
         
         if file_path:
             self.csv_file = file_path
+            self.last_mtime = None
             filename = os.path.basename(file_path)
             self.file_label.setText(filename)
             # Use system colors that adapt to dark/light themes
             self.file_label.setStyleSheet("QLabel { font-weight: bold; }")
+            self.refresh_button.setEnabled(True)
             self.load_file_info()
+
+    def refresh_file_info(self):
+        """Manually refresh CSV metadata and selector options."""
+        self.load_file_info()
+
+    def check_for_file_updates(self):
+        """Refresh metadata when selected CSV file changes on disk."""
+        if not self.csv_file or not os.path.exists(self.csv_file):
+            return
+
+        try:
+            current_mtime = os.path.getmtime(self.csv_file)
+            if self.last_mtime is None:
+                self.last_mtime = current_mtime
+                return
+
+            if current_mtime != self.last_mtime:
+                self.load_file_info()
+        except Exception:
+            # Ignore transient file-access issues while another process is writing.
+            pass
     
     def load_file_info(self):
         """Load and display basic file information"""
@@ -118,53 +155,78 @@ class FileSelectionWidget(QGroupBox):
             return
             
         try:
-            # Read just the first few rows to get info
-            df = pd.read_csv(self.csv_file, nrows=1000)
-            
-            # Store available recordings and channels
-            if 'recording_index' in df.columns:
-                self.available_recordings = sorted(df['recording_index'].unique())
+            # Read full column names first so UI reflects true file schema.
+            header_df = pd.read_csv(self.csv_file, nrows=0)
+            columns = header_df.columns.tolist()
+
+            # Read full index columns to avoid missing selector values in larger files.
+            index_cols = [col for col in ['recording_index', 'channel_index'] if col in columns]
+            if index_cols:
+                index_df = pd.read_csv(self.csv_file, usecols=index_cols)
+            else:
+                index_df = pd.DataFrame()
+
+            if 'recording_index' in index_df.columns:
+                self.available_recordings = sorted(index_df['recording_index'].dropna().unique().tolist())
             else:
                 self.available_recordings = []
-                
-            if 'channel_index' in df.columns:
-                self.available_channels = sorted(df['channel_index'].unique())
+
+            if 'channel_index' in index_df.columns:
+                self.available_channels = sorted(index_df['channel_index'].dropna().unique().tolist())
             else:
                 self.available_channels = []
+
+            self.recording_channel_pairs = []
+            if {'recording_index', 'channel_index'}.issubset(index_df.columns):
+                pair_df = index_df[['recording_index', 'channel_index']].dropna().drop_duplicates()
+                self.recording_channel_pairs = sorted(
+                    [(row.recording_index, row.channel_index) for row in pair_df.itertuples(index=False)],
+                    key=lambda x: (x[0], x[1])
+                )
+
+            # Read a sample for descriptive ranges in the file info panel.
+            sample_df = pd.read_csv(self.csv_file, nrows=1000)
             
             info_text = f"File: {os.path.basename(self.csv_file)}\n"
-            info_text += f"Columns: {', '.join(df.columns.tolist())}\n"
+            info_text += f"Columns: {', '.join(columns)}\n"
             
-            if 'recording_index' in df.columns:
-                recordings = df['recording_index'].nunique()
+            if self.available_recordings:
+                recordings = len(self.available_recordings)
                 info_text += f"Number of recordings: {recordings}\n"
             
-            if 'channel_index' in df.columns:
-                channels = sorted(df['channel_index'].unique())
+            if self.available_channels:
+                channels = self.available_channels
                 info_text += f"Available channels: {channels}\n"
             
-            if 'stimulus_V' in df.columns:
-                stim_range = f"{df['stimulus_V'].min():.2f} - {df['stimulus_V'].max():.2f} V"
+            if 'stimulus_V' in sample_df.columns:
+                stim_range = f"{sample_df['stimulus_V'].min():.2f} - {sample_df['stimulus_V'].max():.2f} V"
                 info_text += f"Stimulus range: {stim_range}\n"
             
-            if 'time_point' in df.columns:
-                time_range = f"{df['time_point'].min():.1f} - {df['time_point'].max():.1f} ms"
+            if 'time_point' in sample_df.columns:
+                time_range = f"{sample_df['time_point'].min():.1f} - {sample_df['time_point'].max():.1f} ms"
                 info_text += f"Time range: {time_range}"
             
             # Set the text and force update
             self.info_text.clear()
             self.info_text.setText(info_text)
             self.info_text.update()
+
+            self.last_mtime = os.path.getmtime(self.csv_file)
             
             # Call callback if set
             if self.file_info_callback:
-                self.file_info_callback(self.available_recordings, self.available_channels)
+                self.file_info_callback(
+                    self.available_recordings,
+                    self.available_channels,
+                    self.recording_channel_pairs
+                )
             
         except Exception as e:
             error_msg = f"Error reading file: {str(e)}"
             self.info_text.setText(error_msg)
             self.available_recordings = []
             self.available_channels = []
+            self.recording_channel_pairs = []
 
 
 class PlotOptionsWidget(QGroupBox):
@@ -172,6 +234,10 @@ class PlotOptionsWidget(QGroupBox):
     
     def __init__(self):
         super().__init__("Plot Options")
+        self.available_recordings = []
+        self.available_channels = []
+        self.recording_channel_pairs = []
+        self._updating_selectors = False
         self.setup_ui()
     
     def setup_ui(self):
@@ -187,10 +253,12 @@ class PlotOptionsWidget(QGroupBox):
         # Recording and channel selectors (will be populated when file is loaded)
         self.recording_combo = QComboBox()
         self.recording_combo.setToolTip("Select which recording index to plot from the CSV file")
+        self.recording_combo.currentIndexChanged.connect(self.on_recording_changed)
         basic_layout.addRow("Recording Index:", self.recording_combo)
         
         self.channel_combo = QComboBox()
         self.channel_combo.setToolTip("Select which channel index to plot from the CSV file")
+        self.channel_combo.currentIndexChanged.connect(self.on_channel_changed)
         basic_layout.addRow("Channel Index:", self.channel_combo)
         
         self.overlay_check = QCheckBox()
@@ -337,6 +405,48 @@ class PlotOptionsWidget(QGroupBox):
         self.fixed_y_check.setChecked(False)
         self.fixed_y_check.setToolTip("Use consistent Y-axis scaling across all plots for comparison")
         time_layout.addRow("Fixed Y-axis Scaling:", self.fixed_y_check)
+
+        self.manual_axes_check = QCheckBox()
+        self.manual_axes_check.setChecked(False)
+        self.manual_axes_check.setToolTip("Use explicit X/Y axis limits so multiple CSV outputs share the same scale")
+        self.manual_axes_check.toggled.connect(self.on_manual_axes_toggled)
+        time_layout.addRow("Use Manual Axis Limits:", self.manual_axes_check)
+
+        self.manual_xmin_spin = QDoubleSpinBox()
+        self.manual_xmin_spin.setMinimum(-99999.99)
+        self.manual_xmin_spin.setMaximum(99999.99)
+        self.manual_xmin_spin.setDecimals(3)
+        self.manual_xmin_spin.setValue(-5.0)
+        self.manual_xmin_spin.setEnabled(False)
+        self.manual_xmin_spin.setToolTip("Manual minimum X-axis value (ms)")
+        time_layout.addRow("Manual X Min (ms):", self.manual_xmin_spin)
+
+        self.manual_xmax_spin = QDoubleSpinBox()
+        self.manual_xmax_spin.setMinimum(-99999.99)
+        self.manual_xmax_spin.setMaximum(99999.99)
+        self.manual_xmax_spin.setDecimals(3)
+        self.manual_xmax_spin.setValue(25.0)
+        self.manual_xmax_spin.setEnabled(False)
+        self.manual_xmax_spin.setToolTip("Manual maximum X-axis value (ms)")
+        time_layout.addRow("Manual X Max (ms):", self.manual_xmax_spin)
+
+        self.manual_ymin_spin = QDoubleSpinBox()
+        self.manual_ymin_spin.setMinimum(-99999.99)
+        self.manual_ymin_spin.setMaximum(99999.99)
+        self.manual_ymin_spin.setDecimals(6)
+        self.manual_ymin_spin.setValue(-0.1)
+        self.manual_ymin_spin.setEnabled(False)
+        self.manual_ymin_spin.setToolTip("Manual minimum Y-axis value (mV)")
+        time_layout.addRow("Manual Y Min (mV):", self.manual_ymin_spin)
+
+        self.manual_ymax_spin = QDoubleSpinBox()
+        self.manual_ymax_spin.setMinimum(-99999.99)
+        self.manual_ymax_spin.setMaximum(99999.99)
+        self.manual_ymax_spin.setDecimals(6)
+        self.manual_ymax_spin.setValue(0.1)
+        self.manual_ymax_spin.setEnabled(False)
+        self.manual_ymax_spin.setToolTip("Manual maximum Y-axis value (mV)")
+        time_layout.addRow("Manual Y Max (mV):", self.manual_ymax_spin)
         
         self.create_axes_check = QCheckBox()
         self.create_axes_check.setChecked(False)
@@ -415,27 +525,79 @@ class PlotOptionsWidget(QGroupBox):
                 }
             """)
     
-    def update_recording_channel_options(self, available_recordings, available_channels):
+    def _populate_combo(self, combo, options, empty_label):
+        """Populate a combo box and preserve selection when possible."""
+        previous_value = combo.currentData()
+        combo.blockSignals(True)
+        combo.clear()
+
+        if options:
+            for value in options:
+                combo.addItem(str(value), value)
+            combo.setEnabled(True)
+
+            # Restore previous selection when still valid.
+            if previous_value in options:
+                combo.setCurrentIndex(options.index(previous_value))
+            else:
+                combo.setCurrentIndex(0)
+        else:
+            combo.addItem(empty_label, None)
+            combo.setEnabled(False)
+
+        combo.blockSignals(False)
+
+    def _allowed_recordings_for_channel(self, channel_value):
+        if not self.recording_channel_pairs or channel_value is None:
+            return self.available_recordings
+        return sorted({rec for rec, ch in self.recording_channel_pairs if ch == channel_value})
+
+    def _allowed_channels_for_recording(self, recording_value):
+        if not self.recording_channel_pairs or recording_value is None:
+            return self.available_channels
+        return sorted({ch for rec, ch in self.recording_channel_pairs if rec == recording_value})
+
+    def on_recording_changed(self, _index):
+        """Filter channel options to those valid for selected recording."""
+        if self._updating_selectors:
+            return
+
+        self._updating_selectors = True
+        try:
+            selected_recording = self.recording_combo.currentData()
+            allowed_channels = self._allowed_channels_for_recording(selected_recording)
+            self._populate_combo(self.channel_combo, allowed_channels, "No channels found")
+        finally:
+            self._updating_selectors = False
+
+    def on_channel_changed(self, _index):
+        """Filter recording options to those valid for selected channel."""
+        if self._updating_selectors:
+            return
+
+        self._updating_selectors = True
+        try:
+            selected_channel = self.channel_combo.currentData()
+            allowed_recordings = self._allowed_recordings_for_channel(selected_channel)
+            self._populate_combo(self.recording_combo, allowed_recordings, "No recordings found")
+        finally:
+            self._updating_selectors = False
+
+    def update_recording_channel_options(self, available_recordings, available_channels, recording_channel_pairs=None):
         """Update recording and channel combo boxes with available options"""
-        # Update recording combo box
-        self.recording_combo.clear()
-        if available_recordings:
-            for recording in available_recordings:
-                self.recording_combo.addItem(str(recording), recording)
-            self.recording_combo.setEnabled(True)
-        else:
-            self.recording_combo.addItem("No recordings found", 0)
-            self.recording_combo.setEnabled(False)
-        
-        # Update channel combo box
-        self.channel_combo.clear()
-        if available_channels:
-            for channel in available_channels:
-                self.channel_combo.addItem(str(channel), channel)
-            self.channel_combo.setEnabled(True)
-        else:
-            self.channel_combo.addItem("No channels found", 0)
-            self.channel_combo.setEnabled(False)
+        self.available_recordings = available_recordings or []
+        self.available_channels = available_channels or []
+        self.recording_channel_pairs = recording_channel_pairs or []
+
+        self._updating_selectors = True
+        try:
+            self._populate_combo(self.recording_combo, self.available_recordings, "No recordings found")
+            self._populate_combo(self.channel_combo, self.available_channels, "No channels found")
+        finally:
+            self._updating_selectors = False
+
+        # Enforce valid recording/channel combinations after loading/refreshing data.
+        self.on_recording_changed(self.recording_combo.currentIndex())
     
     def on_overlay_toggled(self, checked):
         """Enable/disable overlay-specific options"""
@@ -443,12 +605,20 @@ class PlotOptionsWidget(QGroupBox):
         tab_widget = self.findChild(QTabWidget)
         if tab_widget:
             tab_widget.setTabEnabled(1, checked)  # Overlay tab
+
+    def on_manual_axes_toggled(self, checked):
+        """Enable/disable manual axis limit controls."""
+        self.manual_xmin_spin.setEnabled(checked)
+        self.manual_xmax_spin.setEnabled(checked)
+        self.manual_ymin_spin.setEnabled(checked)
+        self.manual_ymax_spin.setEnabled(checked)
     
     def get_plot_options(self):
         """Get all plot options as a dictionary"""
         # Get values from combo boxes, fallback to 0 if no valid selection
         recording_index = self.recording_combo.currentData() if self.recording_combo.currentData() is not None else 0
         channel_index = self.channel_combo.currentData() if self.channel_combo.currentData() is not None else 0
+        use_manual_axes = self.manual_axes_check.isChecked()
         
         return {
             'recording_index': recording_index,
@@ -465,6 +635,10 @@ class PlotOptionsWidget(QGroupBox):
             'dpi': self.dpi_spin.value(),
             'tmin': None if self.tmin_spin.value() == -9999.99 else self.tmin_spin.value(),
             'tmax': None if self.tmax_spin.value() == -9999.99 else self.tmax_spin.value(),
+            'x_min': self.manual_xmin_spin.value() if use_manual_axes else None,
+            'x_max': self.manual_xmax_spin.value() if use_manual_axes else None,
+            'y_min': self.manual_ymin_spin.value() if use_manual_axes else None,
+            'y_max': self.manual_ymax_spin.value() if use_manual_axes else None,
             'hide_axes': self.hide_axes_check.isChecked(),
             'transparent': self.transparent_check.isChecked(),
             'fixed_y': self.fixed_y_check.isChecked(),
@@ -761,7 +935,6 @@ class EMGPlotterMainWindow(QMainWindow):
         
         if self.output_widget.output_file:
             self.log_message(f"Plot saved successfully to: {self.output_widget.output_file}")
-            QMessageBox.information(self, "Success", f"Plot saved successfully!\n\nOutput: {self.output_widget.output_file}")
         else:
             self.log_message("Plot displayed successfully!")
     
@@ -783,6 +956,20 @@ class EMGPlotterMainWindow(QMainWindow):
         if not os.path.exists(self.file_widget.csv_file):
             QMessageBox.warning(self, "File Error", "Selected CSV file does not exist.")
             return False
+
+        if self.options_widget.manual_axes_check.isChecked():
+            x_min = self.options_widget.manual_xmin_spin.value()
+            x_max = self.options_widget.manual_xmax_spin.value()
+            y_min = self.options_widget.manual_ymin_spin.value()
+            y_max = self.options_widget.manual_ymax_spin.value()
+
+            if x_min >= x_max:
+                QMessageBox.warning(self, "Axis Limits Error", "Manual X Min must be less than Manual X Max.")
+                return False
+
+            if y_min >= y_max:
+                QMessageBox.warning(self, "Axis Limits Error", "Manual Y Min must be less than Manual Y Max.")
+                return False
         
         return True
     
