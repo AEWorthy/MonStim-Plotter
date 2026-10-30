@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
-import pandas as pd
-import matplotlib.pyplot as plt
 import argparse
+import math
+import os
+
+import matplotlib.pyplot as plt
+import pandas as pd
 from matplotlib import cm
 from matplotlib.colors import Normalize
-import os
 
 
 def get_nice_scale_bar(data_span, target_fraction=0.25):
     """Return a readable scale-bar length based on a data span."""
-    if data_span <= 0 or not isinstance(data_span, (int, float)) or data_span != data_span:
+    if (
+        not isinstance(data_span, (int, float))
+        or not math.isfinite(data_span)
+        or data_span <= 0
+    ):
         return 1.0
 
     target_size = data_span * target_fraction
@@ -38,6 +44,7 @@ def format_scale_value(value):
         return str(int(value)) if float(value).is_integer() else f"{value:g}"
     return f"{value:.3g}"
 
+
 def create_axes_plot(
     output_file,
     x_range=None,
@@ -49,7 +56,7 @@ def create_axes_plot(
     figsize=(4, 4),
     dpi=300,
     line_width=2.5,
-    font_size=16
+    font_size=16,
 ):
     """
     Create a clean axes plot with scale bars that represent the actual data scale.
@@ -59,14 +66,14 @@ def create_axes_plot(
         x_range = (0, 100)
     if y_range is None:
         y_range = (-50, 50)
-    
+
     # Calculate the actual data ranges
     x_span = x_range[1] - x_range[0]
     y_span = y_range[1] - y_range[0]
 
     if x_span <= 0 or y_span <= 0:
         raise ValueError("x_range and y_range must be increasing ranges")
-    
+
     if scale_bar_x is None:
         scale_bar_x = get_nice_scale_bar(x_span)
     if scale_bar_y is None:
@@ -75,7 +82,7 @@ def create_axes_plot(
     # Clamp bars so they always fit cleanly inside the visible ranges.
     scale_bar_x = min(scale_bar_x, x_span * 0.8)
     scale_bar_y = min(scale_bar_y, y_span * 0.8)
-    
+
     fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
 
     # Place bars in the lower-left with positive padding inside real data units.
@@ -88,13 +95,13 @@ def create_axes_plot(
     tick_size_x = x_span * 0.012
     tick_size_y = y_span * 0.012
 
-    line_kwargs = dict(
-        color='black',
-        linewidth=line_width,
-        antialiased=False,
-        solid_capstyle='projecting',
-        solid_joinstyle='miter',
-    )
+    line_kwargs = {
+        "color": "black",
+        "linewidth": line_width,
+        "antialiased": False,
+        "solid_capstyle": "projecting",
+        "solid_joinstyle": "miter",
+    }
 
     # Draw feet first, then the main axis bars on top to avoid anti-aliased seams.
     ax.plot(
@@ -119,11 +126,11 @@ def create_axes_plot(
         [origin_y, origin_y + scale_bar_y],
         **line_kwargs,
     )
-    
+
     # Labels with proper formatting
     x_unit = x_label.split("(")[-1].rstrip(")") if "(" in x_label else ""
     y_unit = y_label.split("(")[-1].rstrip(")") if "(" in y_label else ""
-    
+
     x_text = f"{format_scale_value(scale_bar_x)} {x_unit}".strip()
     y_text = f"{format_scale_value(scale_bar_y)} {y_unit}".strip()
 
@@ -134,43 +141,43 @@ def create_axes_plot(
         origin_x + scale_bar_x / 2,
         origin_y - label_offset_y,
         x_text,
-        ha='center',
-        va='top',
+        ha="center",
+        va="top",
         fontsize=font_size,
-        color='black'
+        color="black",
     )
 
     ax.text(
         origin_x - label_offset_x,
         origin_y + scale_bar_y / 2,
         y_text,
-        ha='right',
-        va='center',
+        ha="right",
+        va="center",
         rotation=90,
         fontsize=font_size,
-        color='black'
+        color="black",
     )
 
     # Keep exported SVG coordinate system aligned to the source data ranges.
     ax.set_xlim(x_range)
     ax.set_ylim(y_range)
-    
+
     # Clean appearance
-    ax.axis('off')
-    ax.set_facecolor('none')
-    fig.patch.set_facecolor('none')
-    
+    ax.axis("off")
+    ax.set_facecolor("none")
+    fig.patch.set_facecolor("none")
+
     # Save as SVG
-    base_name, ext = os.path.splitext(output_file)
+    base_name, _ = os.path.splitext(output_file)
     axes_file = f"{base_name}_axes.svg"
-    
+
     fig.savefig(
         axes_file,
-        bbox_inches='tight',
+        bbox_inches="tight",
         pad_inches=0.1,
         transparent=True,
-        format='svg',
-        facecolor='none'
+        format="svg",
+        facecolor="none",
     )
     plt.close(fig)
     print(f"Saved axes plot to {axes_file}")
@@ -185,15 +192,15 @@ def add_scale_bars_to_plot(
     y_label="Amplitude (mV)",
     scale_bar_x=None,
     scale_bar_y=None,
-    position='bottom-right',
+    position="bottom-right",
     line_width=2.0,
     font_size=12,
-    color='black',
+    color="black",
     place_outside_vertical=True,
 ):
     """
     Add scale bars directly to an existing plot.
-    
+
     Parameters:
     -----------
     ax : matplotlib axes
@@ -246,29 +253,29 @@ def add_scale_bars_to_plot(
     x_pad = PAD_X * x_span
     y_pad = PAD_Y * y_span
 
-    if position == 'bottom-left':
+    if position == "bottom-left":
         x_start = x_range[0] + x_pad
         y_start = y_range[0] + y_pad
-    elif position == 'bottom-right':
+    elif position == "bottom-right":
         x_start = x_range[1] - x_pad - scale_bar_x
         y_start = y_range[0] + y_pad
-    elif position == 'top-left':
+    elif position == "top-left":
         x_start = x_range[0] + x_pad
         y_start = y_range[1] - y_pad - scale_bar_y
-    elif position == 'top-right':
+    elif position == "top-right":
         x_start = x_range[1] - x_pad - scale_bar_x
         y_start = y_range[1] - y_pad - scale_bar_y
     else:
         x_start = x_range[1] - x_pad - scale_bar_x
         y_start = y_range[0] + y_pad
-    
+
     # Add tick marks at the ends
     tick_size_x = x_span * 0.01  # Small tick relative to x range
     tick_size_y = y_span * 0.01  # Small tick relative to y range
 
     # Move bottom-position scale bars below data traces to avoid overlap/clipping.
     keep_expanded_ylim = False
-    if place_outside_vertical and position in ('bottom-left', 'bottom-right'):
+    if place_outside_vertical and position in ("bottom-left", "bottom-right"):
         if data_y_min is None:
             detected_data_y_min = None
             for line in ax.lines:
@@ -277,11 +284,19 @@ def add_scale_bars_to_plot(
                     continue
                 try:
                     line_min = min(y_vals)
-                except Exception:
+                except (TypeError, ValueError):
                     continue
-                detected_data_y_min = line_min if detected_data_y_min is None else min(detected_data_y_min, line_min)
+                detected_data_y_min = (
+                    line_min
+                    if detected_data_y_min is None
+                    else min(detected_data_y_min, line_min)
+                )
 
-            data_y_min = detected_data_y_min if detected_data_y_min is not None else original_ylim[0]
+            data_y_min = (
+                detected_data_y_min
+                if detected_data_y_min is not None
+                else original_ylim[0]
+            )
 
         # Keep a clear visual gap between waveform and scale-axis block.
         gap_above_bar = max(y_span * 0.10, tick_size_y * 6)
@@ -293,53 +308,74 @@ def add_scale_bars_to_plot(
         if needed_ymin < original_ylim[0]:
             ax.set_ylim(needed_ymin, original_ylim[1])
             keep_expanded_ylim = True
-    
-    line_kwargs = dict(
-        color=color,
-        linewidth=line_width,
-        zorder=1000,
-        antialiased=False,
-        solid_capstyle='projecting',
-        solid_joinstyle='miter',
-        scalex=False,
-        scaley=False,
-    )
+
+    line_kwargs = {
+        "color": color,
+        "linewidth": line_width,
+        "zorder": 1000,
+        "antialiased": False,
+        "solid_capstyle": "projecting",
+        "solid_joinstyle": "miter",
+        "scalex": False,
+        "scaley": False,
+    }
 
     # Draw feet first, then bars on top to prevent visible seams.
     # X-axis end tick
-    ax.plot([x_start + scale_bar_x, x_start + scale_bar_x], 
-            [y_start - tick_size_y, y_start + tick_size_y], 
-            **line_kwargs)
-    
-    # Y-axis end tick  
-    ax.plot([x_start - tick_size_x, x_start + tick_size_x], 
-            [y_start + scale_bar_y, y_start + scale_bar_y], 
-            **line_kwargs)
+    ax.plot(
+        [x_start + scale_bar_x, x_start + scale_bar_x],
+        [y_start - tick_size_y, y_start + tick_size_y],
+        **line_kwargs,
+    )
+
+    # Y-axis end tick
+    ax.plot(
+        [x_start - tick_size_x, x_start + tick_size_x],
+        [y_start + scale_bar_y, y_start + scale_bar_y],
+        **line_kwargs,
+    )
 
     # Horizontal bar (x-axis scale)
     ax.plot([x_start, x_start + scale_bar_x], [y_start, y_start], **line_kwargs)
 
     # Vertical bar (y-axis scale)
     ax.plot([x_start, x_start], [y_start, y_start + scale_bar_y], **line_kwargs)
-    
+
     # Add labels
     x_unit = x_label.split("(")[-1].rstrip(")") if "(" in x_label else ""
     y_unit = y_label.split("(")[-1].rstrip(")") if "(" in y_label else ""
 
     x_text = f"{format_scale_value(scale_bar_x)} {x_unit}".strip()
     y_text = f"{format_scale_value(scale_bar_y)} {y_unit}".strip()
-    
+
     # Position labels appropriately
     label_offset_x = tick_size_x * 3
     label_offset_y = tick_size_y * 3
-    
+
     # X-axis label (below the horizontal bar)
-    ax.text(x_start + scale_bar_x/2, y_start - label_offset_y, x_text, 
-            ha='center', va='top', fontsize=font_size, color=color, zorder=1000)
-    
+    ax.text(
+        x_start + scale_bar_x / 2,
+        y_start - label_offset_y,
+        x_text,
+        ha="center",
+        va="top",
+        fontsize=font_size,
+        color=color,
+        zorder=1000,
+    )
+
     # Y-axis label (to the left of the vertical bar, rotated)
-    ax.text(x_start - label_offset_x, y_start + scale_bar_y/2, y_text, 
-            ha='right', va='center', rotation=90, fontsize=font_size, color=color, zorder=1000)
+    ax.text(
+        x_start - label_offset_x,
+        y_start + scale_bar_y / 2,
+        y_text,
+        ha="right",
+        va="center",
+        rotation=90,
+        fontsize=font_size,
+        color=color,
+        zorder=1000,
+    )
 
     # Restore limits/autoscale state in case backends update view from new artists.
     ax.set_xlim(original_xlim)
@@ -353,12 +389,12 @@ def plot_emg_trace(
     recording_index=0,
     channel_index=1,
     overlay=False,
-    stim_col='stimulus_V',
-    cmap_name='viridis',
+    stim_col="stimulus_V",
+    cmap_name="viridis",
     cmin=None,
     cmax=None,
     show_colorbar=False,
-    color='gold',
+    color="gold",
     linewidth=1.5,
     figsize=(10, 4),
     dpi=300,
@@ -373,7 +409,7 @@ def plot_emg_trace(
     x_min=None,
     x_max=None,
     y_min=None,
-    y_max=None
+    y_max=None,
 ):
     """
     If overlay==False:
@@ -381,7 +417,7 @@ def plot_emg_trace(
     If overlay==True:
         pulls *all* recording_index for the given channel_index,
         colors them by stim_col using cmap_name, and overlays them.
-    
+
     Parameters:
     -----------
     fixed_y : bool, default=True
@@ -403,15 +439,19 @@ def plot_emg_trace(
     """
     df = pd.read_csv(csv_file)
     # apply channel filter
-    df = df[df['channel_index'] == channel_index]
-    
+    df = df[df["channel_index"] == channel_index]
+
     # Calculate global y-limits for fixed scaling if needed
     if fixed_y and not overlay:
-        fixed_data_y_min = df['amplitude_mV'].min()
-        fixed_data_y_max = df['amplitude_mV'].max()
-        
+        fixed_data_y_min = df["amplitude_mV"].min()
+        fixed_data_y_max = df["amplitude_mV"].max()
+
         # Validate y-limits
-        if pd.isna(fixed_data_y_min) or pd.isna(fixed_data_y_max) or fixed_data_y_min == fixed_data_y_max:
+        if (
+            pd.isna(fixed_data_y_min)
+            or pd.isna(fixed_data_y_max)
+            or fixed_data_y_min == fixed_data_y_max
+        ):
             fixed_y = False  # Disable fixed scaling if invalid
         else:
             # Add some padding (5% on each side)
@@ -419,12 +459,12 @@ def plot_emg_trace(
             y_padding = fixed_y_range * 0.05
             y_min_padded = fixed_data_y_min - y_padding
             y_max_padded = fixed_data_y_max + y_padding
-    
+
     # apply time window
     if tmin is not None:
-        df = df[df['time_point'] >= tmin]
+        df = df[df["time_point"] >= tmin]
     if tmax is not None:
-        df = df[df['time_point'] <= tmax]
+        df = df[df["time_point"] <= tmax]
 
     fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
 
@@ -439,19 +479,16 @@ def plot_emg_trace(
         else:
             vmin = 0
             vmax = 1
-            
+
         norm = Normalize(vmin=vmin, vmax=vmax)
         cmap = plt.get_cmap(cmap_name)
 
         # iterate group by recording_index (or by stimulus if you like)
-        for rec_idx, sub in df.groupby('recording_index', sort=True):
+        for rec_idx, sub in df.groupby("recording_index", sort=True):
             stim = sub[stim_col].iloc[0]
             col = cmap(norm(stim))
             ax.plot(
-                sub['time_point'],
-                sub['amplitude_mV'],
-                color=col,
-                linewidth=linewidth
+                sub["time_point"], sub["amplitude_mV"], color=col, linewidth=linewidth
             )
 
         if show_colorbar:
@@ -462,19 +499,16 @@ def plot_emg_trace(
 
     else:
         # single‐trace mode
-        sel = df[df['recording_index'] == recording_index]
+        sel = df[df["recording_index"] == recording_index]
         ax.plot(
-            sel['time_point'],
-            sel['amplitude_mV'],
-            color=color,
-            linewidth=linewidth
+            sel["time_point"], sel["amplitude_mV"], color=color, linewidth=linewidth
         )
 
     # Track actual plotted-data vertical extent for robust scale-bar placement.
     if overlay:
-        plotted_data_y_min = df['amplitude_mV'].min()
+        plotted_data_y_min = df["amplitude_mV"].min()
     else:
-        plotted_data_y_min = sel['amplitude_mV'].min()
+        plotted_data_y_min = sel["amplitude_mV"].min()
 
     if pd.isna(plotted_data_y_min):
         plotted_data_y_min = ax.get_ylim()[0]
@@ -504,7 +538,7 @@ def plot_emg_trace(
         ax.set_ylim(y_min_padded, y_max_padded)
 
     if hide_axes:
-        ax.axis('off')
+        ax.axis("off")
 
     # Add scale bars to the plot if requested
     if plot_axes_on_trace:
@@ -518,7 +552,7 @@ def plot_emg_trace(
             # Use the current plot's y-limits
             ylim = ax.get_ylim()
             y_range = ylim
-        
+
         # Use the final rendered x-limits so scale bars match manual/cropped axes.
         if x_min is not None or x_max is not None:
             xlim = ax.get_xlim()
@@ -528,7 +562,7 @@ def plot_emg_trace(
         else:
             xlim = ax.get_xlim()
             x_range = xlim
-        
+
         # Add scale bars to the plot
         add_scale_bars_to_plot(
             ax,
@@ -537,25 +571,22 @@ def plot_emg_trace(
             data_y_min=plotted_data_y_min,
             x_label="Time (ms)",
             y_label="Amplitude (mV)",
-            position='bottom-left',
+            position="bottom-left",
             line_width=1.5,
             font_size=10,
-            color='black'
+            color="black",
         )
 
     if output_file:
         # Create dir if it doesn't exist
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
-        fig.savefig( # Save the plot to the specified output file
-            output_file,
-            bbox_inches='tight',
-            pad_inches=0,
-            transparent=transparent
+        fig.savefig(  # Save the plot to the specified output file
+            output_file, bbox_inches="tight", pad_inches=0, transparent=transparent
         )
         plt.close(fig)
         print(f"Saved EMG trace to {output_file}")
-        
+
         # Create axes plot if requested
         if create_axes:
             # Determine the appropriate ranges for the axes
@@ -566,10 +597,18 @@ def plot_emg_trace(
                 y_range = (y_min_padded, y_max_padded)
             else:
                 # Use the current plot's y-limits
-                current_y_min = sel['amplitude_mV'].min() if not overlay else df['amplitude_mV'].min()
-                current_y_max = sel['amplitude_mV'].max() if not overlay else df['amplitude_mV'].max()
+                current_y_min = (
+                    sel["amplitude_mV"].min()
+                    if not overlay
+                    else df["amplitude_mV"].min()
+                )
+                current_y_max = (
+                    sel["amplitude_mV"].max()
+                    if not overlay
+                    else df["amplitude_mV"].max()
+                )
                 y_range = (current_y_min, current_y_max)
-            
+
             # Use final rendered x-limits so external axes match the trace plot.
             if x_min is not None or x_max is not None:
                 xlim = ax.get_xlim()
@@ -577,74 +616,120 @@ def plot_emg_trace(
             elif tmin is not None and tmax is not None:
                 x_range = (tmin, tmax)
             else:
-                data_x_min = df['time_point'].min()
-                data_x_max = df['time_point'].max()
+                data_x_min = df["time_point"].min()
+                data_x_max = df["time_point"].max()
                 x_range = (data_x_min, data_x_max)
-            
+
             create_axes_plot(
                 output_file,
                 x_range=x_range,
                 y_range=y_range,
                 x_label="Time (ms)",
-                y_label="Amplitude (mV)"
+                y_label="Amplitude (mV)",
             )
     else:
         plt.show()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     p = argparse.ArgumentParser(
         description="Plot one or all EMG traces colored by stimulus"
     )
-    p.add_argument('csv_file', help='Path to your EMG CSV')
-    p.add_argument('-r', '--recording', type=int, default=0,
-                   help='recording_index to plot (ignored with --overlay)')
-    p.add_argument('-c', '--channel', type=int, default=1,
-                   help='channel_index to plot')
-    p.add_argument('--overlay', action='store_true',
-                   help='plot *all* recordings overlayed, colored by stimulus')
-    p.add_argument('--stim-col',    type=str, default='stimulus_V',
-                   help='column name for stimulus intensity')
-    p.add_argument('--cmap',        type=str, default='viridis',
-                   help='matplotlib colormap name (for overlay)')
-    p.add_argument('--cmin',        type=float, default=None,
-                   help='min stimulus for colormap normalization')
-    p.add_argument('--cmax',        type=float, default=None,
-                   help='max stimulus for colormap normalization')
-    p.add_argument('--show-colorbar', action='store_true',
-                   help='draw a colorbar when using --overlay')
-    p.add_argument('--color',       type=str, default='gold',
-                   help='trace color (for single‐trace mode)')
-    p.add_argument('--linewidth',   type=float, default=1.5,
-                   help='trace line width')
-    p.add_argument('--figsize',     nargs=2, type=float, default=[10, 4],
-                   help='figure size in inches: width height')
-    p.add_argument('--dpi',         type=int, default=300,
-                   help='figure resolution')
-    p.add_argument('--tmin',        type=float, default=None,
-                   help='start time (inclusive) to plot')
-    p.add_argument('--tmax',        type=float, default=None,
-                   help='end time (inclusive) to plot')
-    p.add_argument('--no-hide-axes', action='store_true',
-                   help='show axes/ticks')
-    p.add_argument('--no-transparent', action='store_true',
-                   help='save with opaque background')
-    p.add_argument('--no-fixed-y', action='store_true',
-                   help='disable fixed y-axis scaling (auto-scale each plot)')
-    p.add_argument('--no-axes', action='store_true',
-                   help='disable creation of separate axes SVG file')
-    p.add_argument('--plot-axes-on-trace', action='store_true',
-                   help='add scale bars directly to the trace plot')
-    p.add_argument('--x-min', type=float, default=None,
-                   help='manual minimum x-axis value')
-    p.add_argument('--x-max', type=float, default=None,
-                   help='manual maximum x-axis value')
-    p.add_argument('--y-min', type=float, default=None,
-                   help='manual minimum y-axis value')
-    p.add_argument('--y-max', type=float, default=None,
-                   help='manual maximum y-axis value')
-    p.add_argument('-o', '--output', type=str,
-                   help='output image file (e.g. overlay.png)')
+    p.add_argument("csv_file", help="Path to your EMG CSV")
+    p.add_argument(
+        "-r",
+        "--recording",
+        type=int,
+        default=0,
+        help="recording_index to plot (ignored with --overlay)",
+    )
+    p.add_argument("-c", "--channel", type=int, default=1, help="channel_index to plot")
+    p.add_argument(
+        "--overlay",
+        action="store_true",
+        help="plot *all* recordings overlayed, colored by stimulus",
+    )
+    p.add_argument(
+        "--stim-col",
+        type=str,
+        default="stimulus_V",
+        help="column name for stimulus intensity",
+    )
+    p.add_argument(
+        "--cmap",
+        type=str,
+        default="viridis",
+        help="matplotlib colormap name (for overlay)",
+    )
+    p.add_argument(
+        "--cmin",
+        type=float,
+        default=None,
+        help="min stimulus for colormap normalization",
+    )
+    p.add_argument(
+        "--cmax",
+        type=float,
+        default=None,
+        help="max stimulus for colormap normalization",
+    )
+    p.add_argument(
+        "--show-colorbar",
+        action="store_true",
+        help="draw a colorbar when using --overlay",
+    )
+    p.add_argument(
+        "--color", type=str, default="gold", help="trace color (for single‐trace mode)"
+    )
+    p.add_argument("--linewidth", type=float, default=1.5, help="trace line width")
+    p.add_argument(
+        "--figsize",
+        nargs=2,
+        type=float,
+        default=[10, 4],
+        help="figure size in inches: width height",
+    )
+    p.add_argument("--dpi", type=int, default=300, help="figure resolution")
+    p.add_argument(
+        "--tmin", type=float, default=None, help="start time (inclusive) to plot"
+    )
+    p.add_argument(
+        "--tmax", type=float, default=None, help="end time (inclusive) to plot"
+    )
+    p.add_argument("--no-hide-axes", action="store_true", help="show axes/ticks")
+    p.add_argument(
+        "--no-transparent", action="store_true", help="save with opaque background"
+    )
+    p.add_argument(
+        "--no-fixed-y",
+        action="store_true",
+        help="disable fixed y-axis scaling (auto-scale each plot)",
+    )
+    p.add_argument(
+        "--no-axes",
+        action="store_true",
+        help="disable creation of separate axes SVG file",
+    )
+    p.add_argument(
+        "--plot-axes-on-trace",
+        action="store_true",
+        help="add scale bars directly to the trace plot",
+    )
+    p.add_argument(
+        "--x-min", type=float, default=None, help="manual minimum x-axis value"
+    )
+    p.add_argument(
+        "--x-max", type=float, default=None, help="manual maximum x-axis value"
+    )
+    p.add_argument(
+        "--y-min", type=float, default=None, help="manual minimum y-axis value"
+    )
+    p.add_argument(
+        "--y-max", type=float, default=None, help="manual maximum y-axis value"
+    )
+    p.add_argument(
+        "-o", "--output", type=str, help="output image file (e.g. overlay.png)"
+    )
     args = p.parse_args()
 
     plot_emg_trace(
@@ -672,5 +757,5 @@ if __name__ == '__main__':
         x_min=args.x_min,
         x_max=args.x_max,
         y_min=args.y_min,
-        y_max=args.y_max
+        y_max=args.y_max,
     )

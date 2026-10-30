@@ -113,16 +113,16 @@ python plot_emg.py data.csv --overlay --figsize 12 6 --dpi 300 --create-axes -o 
 from plot_emg import plot_emg_trace
 
 # Basic usage
-plot_emg_trace('data.csv', recording_index=0, channel_index=1, output_file='result.png')
+plot_emg_trace("data.csv", recording_index=0, channel_index=1, output_file="result.png")
 
 # Advanced overlay plot
 plot_emg_trace(
-    'data.csv',
+    "data.csv",
     overlay=True,
-    cmap_name='inferno',
+    cmap_name="inferno",
     show_colorbar=True,
     figsize=(12, 6),
-    output_file='overlay.png'
+    output_file="overlay.png",
 )
 ```
 
@@ -180,14 +180,12 @@ import pandas as pd
 from plot_emg import plot_emg_trace
 
 # Process all recordings
-df = pd.read_csv('data.csv')
-recordings = df['recording_index'].unique()
+df = pd.read_csv("data.csv")
+recordings = df["recording_index"].unique()
 
 for rec in recordings:
     plot_emg_trace(
-        'data.csv',
-        recording_index=rec,
-        output_file=f'recording_{rec:03d}.png'
+        "data.csv", recording_index=rec, output_file=f"recording_{rec:03d}.png"
     )
 ```
 
@@ -195,14 +193,14 @@ for rec in recordings:
 ```python
 # Publication-ready styling
 plot_emg_trace(
-    'data.csv',
+    "data.csv",
     overlay=True,
-    cmap_name='viridis',
+    cmap_name="viridis",
     figsize=(10, 6),
     dpi=300,
     linewidth=1.0,
     transparent=True,
-    create_axes=True
+    create_axes=True,
 )
 ```
 

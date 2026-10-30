@@ -7,100 +7,122 @@ This can be run before building to ensure all imports work
 import sys
 import traceback
 
+
 def test_imports():
     """Test all critical imports"""
     errors = []
-    
+
     print("Testing critical imports...")
-    
+
     # Test PySide6
     try:
+        from PySide6.QtCore import Qt, QThread, Signal
+        from PySide6.QtGui import QColor, QFont, QIcon
         from PySide6.QtWidgets import QApplication, QMainWindow
-        from PySide6.QtCore import QThread, Signal, Qt
-        from PySide6.QtGui import QFont, QIcon, QColor
+
+        _ = (Qt, QThread, Signal, QColor, QFont, QIcon, QApplication, QMainWindow)
+
         print("✓ PySide6 imports successful")
     except ImportError as e:
         errors.append(f"PySide6 import failed: {e}")
         print(f"✗ PySide6 import failed: {e}")
-    
+
     # Test matplotlib
     try:
         import matplotlib
-        matplotlib.use('QtAgg')  # Set backend
+
+        matplotlib.use("QtAgg")  # Set backend
         import matplotlib.pyplot as plt
         from matplotlib import cm
-        from matplotlib.colors import Normalize
         from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+        from matplotlib.colors import Normalize
+
+        _ = (plt, cm, FigureCanvasQTAgg, Normalize)
+
         print("✓ Matplotlib imports successful")
     except ImportError as e:
         errors.append(f"Matplotlib import failed: {e}")
         print(f"✗ Matplotlib import failed: {e}")
-    
+
     # Test PIL/Pillow
     try:
         import PIL
         from PIL import Image
+
+        _ = (PIL, Image)
+
         print("✓ PIL/Pillow imports successful")
     except ImportError as e:
         errors.append(f"PIL/Pillow import failed: {e}")
         print(f"✗ PIL/Pillow import failed: {e}")
-    
+
     # Test pandas and numpy
     try:
-        import pandas as pd
         import numpy as np
+        import pandas as pd
+
+        _ = (np, pd)
+
         print("✓ Pandas and NumPy imports successful")
     except ImportError as e:
         errors.append(f"Pandas/NumPy import failed: {e}")
         print(f"✗ Pandas/NumPy import failed: {e}")
-    
+
     # Test our local module
     try:
         from plot_emg import plot_emg_trace
+
+        _ = plot_emg_trace
+
         print("✓ plot_emg module import successful")
     except ImportError as e:
         errors.append(f"plot_emg import failed: {e}")
         print(f"✗ plot_emg import failed: {e}")
-    
+
     # Test GUI main import
     try:
         from emg_plotter_gui import main as gui_main
+
+        _ = gui_main
+
         print("✓ emg_plotter_gui import successful")
     except ImportError as e:
         errors.append(f"emg_plotter_gui import failed: {e}")
         print(f"✗ emg_plotter_gui import failed: {e}")
-    
+
     return errors
+
 
 def main():
     """Run all tests"""
     print("=" * 50)
     print("EMG Plotter Dependency Test")
     print("=" * 50)
-    
+
     print(f"Python version: {sys.version}")
     print(f"Platform: {sys.platform}")
-    print("")
-    
+    print()
+
     errors = test_imports()
-    
-    print("")
+
+    print()
     print("=" * 50)
     if errors:
         print("ERRORS FOUND:")
         for error in errors:
             print(f"  - {error}")
-        print("")
+        print()
         print("Please install missing dependencies before building.")
         return 1
     else:
         print("All imports successful! Ready to build.")
         return 0
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     try:
         sys.exit(main())
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - print unexpected dependency-check failures
         print(f"Test script failed: {e}")
         print(traceback.format_exc())
         sys.exit(1)
